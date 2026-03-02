@@ -1,0 +1,180 @@
+// Maritime Navigation Risk Bayesian Network
+// Designed for geobn — Norwegian outer coast (Stad–Ålesund) example
+//
+// Evidence nodes (continuous rasters):
+//   wave_height    — significant wave height (m), from MET Norway OceanForecast
+//   current_speed  — sea water speed (m/s), from MET Norway OceanForecast
+//   water_depth    — positive depth (m), derived from EMODnet Bathymetry
+//   wind_onshore   — binary indicator: is wind blowing toward shallower water?
+//                    derived from wind direction + bathymetry gradient
+//   vessel_density — historical vessel hours/km²/month, from EMODnet Human Activities
+//   wind_speed     — wind speed (m/s), from MET Norway LocationForecast
+//
+// Intermediate nodes:
+//   sea_state — combined sea conditions (wave height × current speed)
+//
+// Output nodes:
+//   grounding_risk — posterior grounding risk (water depth × sea state × wind_onshore)
+//   collision_risk — posterior collision risk (vessel density × sea state × wind speed)
+//
+// Discretization breakpoints used in run_example.py:
+//   wave_height    : [0, 0.5, 2.0, 10.0] m     → calm / moderate / rough
+//   current_speed  : [0, 0.3, 1.0, 5.0] m/s   → low / moderate / high
+//   wind_speed     : [0, 5, 15, 50] m/s        → calm / moderate / strong
+//   water_depth    : [0, 20, 100, 9999] m      → very_shallow / shallow / deep
+//   wind_onshore   : [0.0, 0.5, 1.5]           → offshore / onshore
+//   vessel_density : [0, 0.5, 5.0, 1e6] hr/km²/month → sparse / moderate / dense
+
+network maritime_norway {}
+
+variable wave_height {
+  type discrete [ 3 ] { calm, moderate, rough };
+}
+
+variable current_speed {
+  type discrete [ 3 ] { low, moderate, high };
+}
+
+variable water_depth {
+  type discrete [ 3 ] { very_shallow, shallow, deep };
+}
+
+variable wind_onshore {
+  type discrete [ 2 ] { offshore, onshore };
+}
+
+variable vessel_density {
+  type discrete [ 3 ] { sparse, moderate, dense };
+}
+
+variable wind_speed {
+  type discrete [ 3 ] { calm, moderate, strong };
+}
+
+variable sea_state {
+  type discrete [ 3 ] { calm, moderate, rough };
+}
+
+variable grounding_risk {
+  type discrete [ 3 ] { low, medium, high };
+}
+
+variable collision_risk {
+  type discrete [ 3 ] { low, medium, high };
+}
+
+// Uniform priors for evidence nodes (overridden by spatial evidence at infer-time)
+probability ( wave_height ) {
+  table 0.333, 0.333, 0.334;
+}
+
+probability ( current_speed ) {
+  table 0.333, 0.333, 0.334;
+}
+
+probability ( water_depth ) {
+  table 0.333, 0.333, 0.334;
+}
+
+probability ( wind_onshore ) {
+  table 0.500, 0.500;
+}
+
+probability ( vessel_density ) {
+  table 0.333, 0.333, 0.334;
+}
+
+probability ( wind_speed ) {
+  table 0.333, 0.333, 0.334;
+}
+
+// P(sea_state | wave_height, current_speed)
+// wave_height varies slowest (calm → moderate → rough)
+// current_speed varies fastest (low → moderate → high)
+//
+// Rationale:
+//   Rough waves + strong current = compound rough sea state.
+//   Currents alone can add significant chop even in calm wave conditions.
+//   Stad peninsula has strong tidal currents interacting with Atlantic swell.
+probability ( sea_state | wave_height, current_speed ) {
+  (calm,     low)      0.85, 0.12, 0.03;
+  (calm,     moderate) 0.70, 0.25, 0.05;
+  (calm,     high)     0.55, 0.35, 0.10;
+  (moderate, low)      0.20, 0.60, 0.20;
+  (moderate, moderate) 0.15, 0.55, 0.30;
+  (moderate, high)     0.10, 0.45, 0.45;
+  (rough,    low)      0.05, 0.25, 0.70;
+  (rough,    moderate) 0.03, 0.17, 0.80;
+  (rough,    high)     0.02, 0.13, 0.85;
+}
+
+// P(grounding_risk | water_depth, sea_state, wind_onshore)
+// water_depth varies slowest (very_shallow → shallow → deep)
+// sea_state varies middle (calm → moderate → rough)
+// wind_onshore varies fastest (offshore → onshore)
+//
+// Rationale:
+//   - Deep water: always low risk regardless of conditions
+//   - Very shallow + rough sea + onshore wind: extreme risk (pushed toward shoals)
+//   - Offshore wind provides protective effect by pushing vessels away from hazards
+//   - The Stad–Ålesund coast has numerous shallow skerries that cause groundings
+probability ( grounding_risk | water_depth, sea_state, wind_onshore ) {
+  (very_shallow, calm,     offshore) 0.60, 0.30, 0.10;
+  (very_shallow, calm,     onshore)  0.45, 0.38, 0.17;
+  (very_shallow, moderate, offshore) 0.35, 0.43, 0.22;
+  (very_shallow, moderate, onshore)  0.20, 0.45, 0.35;
+  (very_shallow, rough,    offshore) 0.20, 0.45, 0.35;
+  (very_shallow, rough,    onshore)  0.02, 0.18, 0.80;
+  (shallow,      calm,     offshore) 0.82, 0.15, 0.03;
+  (shallow,      calm,     onshore)  0.72, 0.22, 0.06;
+  (shallow,      moderate, offshore) 0.65, 0.28, 0.07;
+  (shallow,      moderate, onshore)  0.45, 0.40, 0.15;
+  (shallow,      rough,    offshore) 0.45, 0.40, 0.15;
+  (shallow,      rough,    onshore)  0.15, 0.43, 0.42;
+  (deep,         calm,     offshore) 0.97, 0.02, 0.01;
+  (deep,         calm,     onshore)  0.95, 0.04, 0.01;
+  (deep,         moderate, offshore) 0.95, 0.04, 0.01;
+  (deep,         moderate, onshore)  0.93, 0.06, 0.01;
+  (deep,         rough,    offshore) 0.92, 0.07, 0.01;
+  (deep,         rough,    onshore)  0.90, 0.09, 0.01;
+}
+
+// P(collision_risk | vessel_density, sea_state, wind_speed)
+// vessel_density varies slowest (sparse → moderate → dense)
+// sea_state varies middle (calm → moderate → rough)
+// wind_speed varies fastest (calm → moderate → strong)
+//
+// Rationale:
+//   - Dense historical traffic + rough + strong wind: extreme collision risk
+//   - Reduced visibility and manoeuvrability in strong winds and rough seas
+//   - Sparse traffic areas remain low-risk regardless of sea conditions
+//   - The fishing grounds and ferry lanes in this area carry significant traffic
+probability ( collision_risk | vessel_density, sea_state, wind_speed ) {
+  (sparse,   calm,     calm)     0.92, 0.07, 0.01;
+  (sparse,   calm,     moderate) 0.88, 0.10, 0.02;
+  (sparse,   calm,     strong)   0.82, 0.15, 0.03;
+  (sparse,   moderate, calm)     0.85, 0.12, 0.03;
+  (sparse,   moderate, moderate) 0.78, 0.18, 0.04;
+  (sparse,   moderate, strong)   0.70, 0.24, 0.06;
+  (sparse,   rough,    calm)     0.75, 0.20, 0.05;
+  (sparse,   rough,    moderate) 0.65, 0.28, 0.07;
+  (sparse,   rough,    strong)   0.55, 0.35, 0.10;
+  (moderate, calm,     calm)     0.70, 0.25, 0.05;
+  (moderate, calm,     moderate) 0.60, 0.32, 0.08;
+  (moderate, calm,     strong)   0.50, 0.38, 0.12;
+  (moderate, moderate, calm)     0.55, 0.35, 0.10;
+  (moderate, moderate, moderate) 0.40, 0.42, 0.18;
+  (moderate, moderate, strong)   0.30, 0.45, 0.25;
+  (moderate, rough,    calm)     0.40, 0.42, 0.18;
+  (moderate, rough,    moderate) 0.25, 0.45, 0.30;
+  (moderate, rough,    strong)   0.15, 0.42, 0.43;
+  (dense,    calm,     calm)     0.45, 0.42, 0.13;
+  (dense,    calm,     moderate) 0.30, 0.48, 0.22;
+  (dense,    calm,     strong)   0.20, 0.47, 0.33;
+  (dense,    moderate, calm)     0.30, 0.48, 0.22;
+  (dense,    moderate, moderate) 0.15, 0.45, 0.40;
+  (dense,    moderate, strong)   0.08, 0.32, 0.60;
+  (dense,    rough,    calm)     0.15, 0.45, 0.40;
+  (dense,    rough,    moderate) 0.07, 0.28, 0.65;
+  (dense,    rough,    strong)   0.02, 0.18, 0.80;
+}
