@@ -11,4 +11,4 @@ htmlcov/
 *.geotiff
 output/
 private/
-tools/
+*.DS_Store
