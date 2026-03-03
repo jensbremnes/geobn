@@ -151,7 +151,8 @@ def main() -> None:
     except Exception as exc:
         sys.exit(f"ERROR fetching DTM: {exc}")
 
-    dem = dtm_data.array
+    dem = dtm_data.array.copy()
+    dem[dem <= 0] = np.nan   # ocean / fjord surfaces (Kartverket returns 0 for sea level)
 
     # Derive slope and aspect from the DEM.
     slope_deg, north_facing = compute_slope_aspect(dem)
@@ -179,7 +180,7 @@ def main() -> None:
     bn.set_input("temperature", geobn.ConstantSource(AIR_TEMP_C))
 
     # ── 3. Discretizations ────────────────────────────────────────────────
-    bn.set_discretization("slope_angle", [0, 25, 40, 90],   ["gentle", "steep", "extreme"])
+    bn.set_discretization("slope_angle", [0, 5, 25, 40, 90], ["flat", "gentle", "steep", "extreme"])
     bn.set_discretization("aspect",      [0.0, 0.5, 1.5],   ["favorable", "unfavorable"])
     bn.set_discretization("recent_snow", [0, 10, 25, 150],  ["light", "moderate", "heavy"])
     bn.set_discretization("temperature", [-40, -8, -2, 15], ["cold", "moderate", "warming"])
@@ -236,6 +237,7 @@ def main() -> None:
             extra_layers={"Slope angle (°)": slope_deg},
             show_probability_bands=False,
             show_category=False,
+            score_threshold=0.1,
         )
         print(f"\nInteractive map opened in browser → {html_path}")
         print("  Use the layer control (top-right) to switch overlays.")

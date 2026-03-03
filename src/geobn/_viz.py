@@ -114,6 +114,7 @@ def show_map(
     extra_layers: dict[str, np.ndarray] | None = None,
     show_probability_bands: bool = True,
     show_category: bool = True,
+    score_threshold: float = 0.0,
 ) -> Path:
     """Generate and optionally open an interactive Leaflet map.
 
@@ -201,6 +202,9 @@ def show_map(
 
         # ── Risk score (default shown) ──────────────────────────────────
         score = _risk_score(probs)                   # (H, W) in [0, 100]
+        if score_threshold > 0.0:
+            score = score.copy()
+            score[score < score_threshold * 100] = np.nan
         score_url = _array_to_png_url(score, "RdYlGn_r", 0.0, 100.0, overlay_opacity)
         fg = folium.FeatureGroup(name=f"{node} — risk score", show=True)
         folium.raster_layers.ImageOverlay(image=score_url, bounds=bounds, opacity=1.0).add_to(fg)

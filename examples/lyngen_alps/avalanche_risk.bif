@@ -14,7 +14,7 @@ network avalanche_risk_bn {}
 // ── Root nodes ──────────────────────────────────────────────────────────────
 
 variable slope_angle {
-  type discrete [ 3 ] { gentle, steep, extreme };
+  type discrete [ 4 ] { flat, gentle, steep, extreme };
 }
 
 variable aspect {
@@ -48,7 +48,7 @@ variable avalanche_risk {
 // ── Root node priors (replaced by data at inference time) ────────────────────
 
 probability ( slope_angle ) {
-  table 0.333, 0.333, 0.334;
+  table 0.25, 0.25, 0.25, 0.25;
 }
 
 probability ( aspect ) {
@@ -64,17 +64,19 @@ probability ( temperature ) {
 }
 
 // ── P(terrain_factor | slope_angle, aspect) ──────────────────────────────────
-// Discretization: slope_angle ← [0, 25, 40, 90]°
+// Discretization: slope_angle ← [0, 5, 25, 40, 90]°
 //                 aspect      ← 0=south-facing (favorable), 1=north-facing (unfavorable)
 // P(low, medium, high) for each parent combination:
 
 probability ( terrain_factor | slope_angle, aspect ) {
-  (gentle,  favorable)    0.90, 0.08, 0.02;
-  (gentle,  unfavorable)  0.80, 0.15, 0.05;
-  (steep,   favorable)    0.25, 0.55, 0.20;
-  (steep,   unfavorable)  0.10, 0.35, 0.55;
-  (extreme, favorable)    0.20, 0.45, 0.35;
-  (extreme, unfavorable)  0.08, 0.27, 0.65;
+  (flat,    favorable)    0.99, 0.009, 0.001;
+  (flat,    unfavorable)  0.99, 0.009, 0.001;
+  (gentle,  favorable)    0.90, 0.08,  0.02;
+  (gentle,  unfavorable)  0.80, 0.15,  0.05;
+  (steep,   favorable)    0.25, 0.55,  0.20;
+  (steep,   unfavorable)  0.10, 0.35,  0.55;
+  (extreme, favorable)    0.20, 0.45,  0.35;
+  (extreme, unfavorable)  0.08, 0.27,  0.65;
 }
 
 // ── P(weather_factor | recent_snow, temperature) ─────────────────────────────
