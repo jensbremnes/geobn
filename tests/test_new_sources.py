@@ -161,7 +161,7 @@ class TestKartverketDTMSource:
             KartverketDTMSource(layer="nonexistent")
 
     def test_valid_layers_accepted(self):
-        for layer in ("dtm10", "dtm1", "dom10"):
+        for layer in ("dtm10", "dom10"):
             src = KartverketDTMSource(layer=layer)
             assert src._layer == layer
 

@@ -65,9 +65,12 @@ class WCSSource(DataSource):
             )
 
         lon_min, lat_min, lon_max, lat_max = grid.extent_wgs84()
+        H, W = grid.shape
 
         if self._version.startswith("2"):
             params = self._build_params_v2(lon_min, lat_min, lon_max, lat_max)
+        elif self._version.startswith("1.0"):
+            params = self._build_params_v0(lon_min, lat_min, lon_max, lat_max, H, W)
         else:
             params = self._build_params_v1(lon_min, lat_min, lon_max, lat_max)
 
@@ -108,6 +111,32 @@ class WCSSource(DataSource):
                 f"Long({lon_min},{lon_max})",
             ],
             "SUBSETTINGCRS": "http://www.opengis.net/def/crs/EPSG/0/4326",
+        }
+
+    def _build_params_v0(
+        self,
+        lon_min: float,
+        lat_min: float,
+        lon_max: float,
+        lat_max: float,
+        height: int,
+        width: int,
+    ) -> dict:
+        """WCS 1.0.0 GetCoverage parameters.
+
+        Uses ``COVERAGE`` (not ``IDENTIFIER``) and ``WIDTH``/``HEIGHT`` for
+        output dimensions.
+        """
+        return {
+            "SERVICE": "WCS",
+            "VERSION": self._version,
+            "REQUEST": "GetCoverage",
+            "COVERAGE": self._layer,
+            "FORMAT": self._format,
+            "BBOX": f"{lon_min},{lat_min},{lon_max},{lat_max}",
+            "CRS": "EPSG:4326",
+            "WIDTH": width,
+            "HEIGHT": height,
         }
 
     def _build_params_v1(

@@ -8,12 +8,16 @@ from ..grid import GridSpec
 from ._base import DataSource
 from .wcs_source import WCSSource
 
-_WCS_BASE = "https://wcs.geonorge.no/skwms1/wcs.hoyde-dtm10"
-
+# hoydedata.no ArcGIS WCS endpoints (WCS 1.0.0)
 _LAYER_MAP = {
-    "dtm10": "nhm_dtm_topo_25833",   # 10 m terrain model (projected EPSG:25833)
-    "dtm1": "nhm_dtm_topo_25833",    # 1 m terrain model (same endpoint, different coverage)
-    "dom10": "nhm_dom_topo_25833",   # 10 m surface model
+    "dtm10": (
+        "https://hoydedata.no/arcgis/services/las_dtm_somlos/ImageServer/WCSServer",
+        "las_dtm",
+    ),
+    "dom10": (
+        "https://hoydedata.no/arcgis/services/las_dom_somlos/ImageServer/WCSServer",
+        "las_dom",
+    ),
 }
 
 
@@ -28,11 +32,10 @@ class KartverketDTMSource(DataSource):
     Parameters
     ----------
     layer:
-        Coverage resolution/type:
+        Coverage type:
 
-        * ``"dtm10"`` — 10 m terrain model (default).
-        * ``"dtm1"`` — 1 m terrain model (very large; use small grids only).
-        * ``"dom10"`` — 10 m surface model (includes vegetation/buildings).
+        * ``"dtm10"`` — seamless LiDAR terrain model (default).
+        * ``"dom10"`` — seamless LiDAR surface model (includes vegetation/buildings).
     timeout:
         HTTP request timeout in seconds.
     """
@@ -45,11 +48,12 @@ class KartverketDTMSource(DataSource):
             )
         self._layer = layer
         self._timeout = timeout
+        wcs_url, wcs_coverage = _LAYER_MAP[layer]
         self._wcs = WCSSource(
-            url=_WCS_BASE,
-            layer=_LAYER_MAP[layer],
-            version="2.0.1",
-            format="image/tiff",
+            url=wcs_url,
+            layer=wcs_coverage,
+            version="1.0.0",
+            format="GeoTIFF",
             timeout=timeout,
         )
 
