@@ -34,6 +34,10 @@ class WCSSource(DataSource):
         Optional path to a directory for caching fetched rasters on disk.
         On a cache hit the HTTP request is skipped entirely.  Useful for
         static sources (terrain, bathymetry) where the data never changes.
+    extra_subsets:
+        Additional ``SUBSET=`` values appended to the WCS 2.0 request (e.g.
+        ``['time("2023-01-01T00:00:00.000Z")']`` for time-aware coverages).
+        Ignored for WCS 1.x requests.
     """
 
     def __init__(
@@ -44,6 +48,7 @@ class WCSSource(DataSource):
         format: str = "image/tiff",
         timeout: int = 60,
         cache_dir: str | Path | None = None,
+        extra_subsets: list[str] | None = None,
     ) -> None:
         self._url = url
         self._layer = layer
@@ -51,6 +56,7 @@ class WCSSource(DataSource):
         self._format = format
         self._timeout = timeout
         self._cache_dir = Path(cache_dir).expanduser() if cache_dir is not None else None
+        self._extra_subsets = extra_subsets or []
 
     # ------------------------------------------------------------------
     # DataSource interface
@@ -128,16 +134,17 @@ class WCSSource(DataSource):
         lon_max: float,
         lat_max: float,
     ) -> dict:
+        subsets = [
+            f"Lat({lat_min},{lat_max})",
+            f"Long({lon_min},{lon_max})",
+        ] + list(self._extra_subsets)
         return {
             "SERVICE": "WCS",
             "VERSION": self._version,
             "REQUEST": "GetCoverage",
             "COVERAGEID": self._layer,
             "FORMAT": self._format,
-            "SUBSET": [
-                f"Lat({lat_min},{lat_max})",
-                f"Long({lon_min},{lon_max})",
-            ],
+            "SUBSET": subsets,
             "SUBSETTINGCRS": "http://www.opengis.net/def/crs/EPSG/0/4326",
         }
 

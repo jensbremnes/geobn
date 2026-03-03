@@ -690,13 +690,24 @@ class TestEMODnetShippingDensitySource:
             EMODnetShippingDensitySource(ship_type="submarine")
 
     def test_valid_ship_types_accepted(self):
-        for ship_type in ("all", "cargo", "tanker", "fishing", "passenger", "highspeed"):
+        for ship_type in ("all", "cargo", "tanker", "fishing", "passenger", "highspeed",
+                          "sailing", "pleasure", "service", "dredging", "tug",
+                          "military", "unknown", "other"):
             src = EMODnetShippingDensitySource(ship_type=ship_type)
             assert src._ship_type == ship_type
 
     def test_layer_name_pattern(self):
         src = EMODnetShippingDensitySource(ship_type="cargo", year=2021)
-        assert src._wcs._layer == "emodnet:vessel_density_cargo_2021_annual_avg"
+        assert src._wcs._layer == "emodnet__vesseldensity_09avg"
+        assert src._wcs._extra_subsets == ['time("2021-01-01T00:00:00.000Z")']
+
+    def test_invalid_year_raises_value_error(self):
+        with pytest.raises(ValueError, match="year"):
+            EMODnetShippingDensitySource(year=2016)
+
+    def test_default_year_is_2023(self):
+        src = EMODnetShippingDensitySource()
+        assert src._year == 2023
 
     def test_requires_grid(self):
         pytest.importorskip("rasterio")

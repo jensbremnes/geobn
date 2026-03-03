@@ -19,7 +19,26 @@ from ._base import DataSource
 from .wcs_source import WCSSource
 
 _WCS_BATHYMETRY = "https://ows.emodnet-bathymetry.eu/wcs"
-_WCS_HUMAN_ACTIVITIES = "https://www.emodnet-humanactivities.eu/geoserver/emodnet/wcs"
+_WCS_HUMAN_ACTIVITIES = "https://ows.emodnet-humanactivities.eu/wcs"
+
+# Coverage IDs on the new WCS 2.0.1 endpoint (annual averages).
+# Source: GetCapabilities as of 2025.
+_SHIPPING_LAYER_MAP: dict[str, str] = {
+    "all":      "emodnet__vesseldensity_allavg",
+    "cargo":    "emodnet__vesseldensity_09avg",
+    "tanker":   "emodnet__vesseldensity_10avg",
+    "fishing":  "emodnet__vesseldensity_01avg",
+    "passenger": "emodnet__vesseldensity_08avg",
+    "highspeed": "emodnet__vesseldensity_06avg",
+    "sailing":  "emodnet__vesseldensity_04avg",
+    "pleasure": "emodnet__vesseldensity_05avg",
+    "service":  "emodnet__vesseldensity_02avg",
+    "dredging": "emodnet__vesseldensity_03avg",
+    "tug":      "emodnet__vesseldensity_07avg",
+    "military": "emodnet__vesseldensity_11avg",
+    "unknown":  "emodnet__vesseldensity_12avg",
+    "other":    "emodnet__vesseldensity_00avg",
+}
 
 
 class EMODnetBathymetrySource(DataSource):
@@ -92,28 +111,25 @@ class EMODnetShippingDensitySource(DataSource):
     ----------
     ship_type:
         Vessel category.  One of ``"all"``, ``"cargo"``, ``"tanker"``,
-        ``"fishing"``, ``"passenger"``, ``"highspeed"``.
+        ``"fishing"``, ``"passenger"``, ``"highspeed"``, ``"sailing"``,
+        ``"pleasure"``, ``"service"``, ``"dredging"``, ``"tug"``,
+        ``"military"``, ``"unknown"``, ``"other"``.
     year:
-        Year of the annual average (default 2022).
+        Year of the annual average snapshot (2017–2023, default 2023).
     timeout:
         HTTP request timeout in seconds.
-
-    Notes
-    -----
-    Layer names follow the pattern
-    ``emodnet:vessel_density_{ship_type}_{year}_annual_avg``.
-    Verify available layers via the service GetCapabilities if a
-    ``RuntimeError`` is raised on fetch.
+    cache_dir:
+        Optional path to a directory for caching fetched rasters on disk.
+        On a cache hit the HTTP request is skipped entirely.
     """
 
-    _VALID_SHIP_TYPES = frozenset(
-        {"all", "cargo", "tanker", "fishing", "passenger", "highspeed"}
-    )
+    _VALID_SHIP_TYPES = frozenset(_SHIPPING_LAYER_MAP)
+    _VALID_YEARS = range(2017, 2024)
 
     def __init__(
         self,
         ship_type: str = "all",
-        year: int = 2022,
+        year: int = 2023,
         timeout: int = 60,
         cache_dir: str | Path | None = None,
     ) -> None:
@@ -122,17 +138,23 @@ class EMODnetShippingDensitySource(DataSource):
                 f"Unknown ship_type {ship_type!r}. "
                 f"Valid options: {sorted(self._VALID_SHIP_TYPES)}"
             )
+        if year not in self._VALID_YEARS:
+            raise ValueError(
+                f"year {year} is out of range. "
+                f"Valid years: {self._VALID_YEARS.start}–{self._VALID_YEARS.stop - 1}"
+            )
         self._ship_type = ship_type
         self._year = year
         self._timeout = timeout
-        layer = f"emodnet:vessel_density_{ship_type}_{year}_annual_avg"
+        layer = _SHIPPING_LAYER_MAP[ship_type]
         self._wcs = WCSSource(
             url=_WCS_HUMAN_ACTIVITIES,
             layer=layer,
-            version="1.1.1",
+            version="2.0.1",
             format="image/tiff",
             timeout=timeout,
             cache_dir=cache_dir,
+            extra_subsets=[f'time("{year}-01-01T00:00:00.000Z")'],
         )
 
     def fetch(self, grid: GridSpec | None = None) -> RasterData:
