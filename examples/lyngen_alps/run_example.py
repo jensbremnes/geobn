@@ -34,7 +34,8 @@ Bayesian network (avalanche_risk.bif)
 
 Outputs (examples/lyngen_alps/output/)
 ---------------------------------------
-    avalanche_risk.png  — 3-panel risk map (slope / P(high) / category)
+    map.html            — interactive Leaflet map (pan/zoom, layer switcher)
+                          (requires folium: pip install geobn[viz])
     avalanche_risk.tif  — 4-band GeoTIFF: P(low), P(medium), P(high), entropy
                           (requires rasterio: pip install geobn[io])
 
@@ -227,56 +228,17 @@ def main() -> None:
     print(f"  Steep N-facing slopes (>35°, N-facing)  : P(high) = {p_high_steep_n:.2f}")
     print(f"  Gentle S-facing slopes (<25°, S-facing) : P(high) = {p_high_gentle_s:.2f}")
 
-    # ── 7. Matplotlib 3-panel figure ──────────────────────────────────────
+    # ── 7. Interactive map ─────────────────────────────────────────────────
     try:
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-        from matplotlib.colors import ListedColormap
-
-        fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-        fig.suptitle(
-            "Avalanche Risk Assessment — Lyngen Alps, Tromsø\n"
-            "geobn Bayesian Network Inference",
-            fontsize=13,
-            fontweight="bold",
+        html_path = result.show_map(
+            OUT_DIR,
+            extra_layers={"Slope angle (°)": slope_deg},
         )
-
-        # Panel 1: slope angle
-        ax = axes[0]
-        im = ax.imshow(slope_deg, cmap="Blues", vmin=0, vmax=50, aspect="auto")
-        ax.set_title("Slope Angle (°)", fontsize=11)
-        ax.set_xlabel("column (W → E)")
-        ax.set_ylabel("row (N → S)")
-        plt.colorbar(im, ax=ax, label="degrees", fraction=0.046, pad=0.04)
-
-        # Panel 2: P(risk = high)
-        ax = axes[1]
-        im = ax.imshow(p_high, cmap="Reds", vmin=0, vmax=1, aspect="auto")
-        ax.set_title("P(risk = HIGH)", fontsize=11)
-        ax.set_xlabel("column (W → E)")
-        plt.colorbar(im, ax=ax, label="probability", fraction=0.046, pad=0.04)
-
-        # Panel 3: most likely risk category
-        ax = axes[2]
-        category = np.full(probs.shape[:2], np.nan)
-        valid_mask = np.isfinite(probs[..., 0])
-        category[valid_mask] = np.argmax(probs[valid_mask], axis=-1).astype(float)
-        cat_cmap = ListedColormap(["#2ecc71", "#e67e22", "#e74c3c"])  # green/orange/red
-        im = ax.imshow(category, cmap=cat_cmap, vmin=-0.5, vmax=2.5, aspect="auto")
-        ax.set_title("Risk Category", fontsize=11)
-        ax.set_xlabel("column (W → E)")
-        cbar = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04, ticks=[0, 1, 2])
-        cbar.ax.set_yticklabels(["Low", "Medium", "High"])
-
-        plt.tight_layout()
-        png_path = OUT_DIR / "avalanche_risk.png"
-        fig.savefig(png_path, dpi=150, bbox_inches="tight")
-        plt.close(fig)
-        print(f"\nRisk map saved → {png_path}")
-
-    except ImportError:
-        print("\nSkipping PNG (matplotlib not installed: pip install matplotlib)")
+        print(f"\nInteractive map opened in browser → {html_path}")
+        print("  Use the layer control (top-right) to switch overlays.")
+    except ImportError as exc:
+        print(f"\nSkipping interactive map ({exc})")
+        print("  Install folium: pip install geobn[viz]")
 
     # ── 8. Export GeoTIFF ─────────────────────────────────────────────────
     try:

@@ -67,6 +67,42 @@ class InferenceResult:
             out_path = output_dir / f"{node}.tif"
             write_geotiff(bands, self.crs, self.transform, out_path)
 
+    def show_map(
+        self,
+        output_dir: str | Path = ".",
+        filename: str = "map.html",
+        overlay_opacity: float = 0.65,
+        open_browser: bool = True,
+        extra_layers: dict[str, np.ndarray] | None = None,
+    ) -> Path:
+        """Generate and optionally open an interactive Leaflet map.
+
+        Requires ``folium`` (``pip install geobn[viz]``).
+
+        Parameters
+        ----------
+        output_dir:
+            Directory to write the HTML file into.
+        filename:
+            Output filename (default ``map.html``).
+        overlay_opacity:
+            Opacity of probability overlays (0–1).
+        open_browser:
+            If True (default), open the map in the default browser.
+        extra_layers:
+            Additional named (H, W) arrays to include as overlays
+            (e.g. ``{"Slope angle (°)": slope_deg}``).
+
+        Returns
+        -------
+        Path
+            Path to the written HTML file.
+        """
+        from ._viz import show_map as _show_map  # noqa: PLC0415
+
+        return _show_map(self, output_dir, filename, overlay_opacity,
+                         open_browser, extra_layers)
+
     def to_xarray(self) -> xr.Dataset:
         """Return an xarray Dataset with spatial coordinates.
 

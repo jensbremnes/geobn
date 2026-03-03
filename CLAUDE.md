@@ -30,6 +30,7 @@ DataSources → align to reference grid → discretize → BN inference → Infe
 - Core deps: `pgmpy`, `numpy`, `xarray`, `requests`, `pyproj`, `affine`.
 - Optional `[io]` extra: `rasterio` — required for GeoTIFF read/write.
 - Optional `[ocean]` extra: `copernicusmarine>=2.0`, `pystac-client>=0.7`.
+- Optional `[viz]` extra: `folium>=0.14` — required for `result.show_map()`.
 - Dev extra installs `pytest` and `rasterio`.
 
 ---
@@ -41,11 +42,12 @@ src/geobn/
   __init__.py          Public API re-exports (all sources + network + result)
   _types.py            RasterData NamedTuple(array, crs, transform)
   _io.py               rasterio write helpers — lazy import, isolated
+  _viz.py              show_map() + helpers — folium [viz] optional dep
   network.py           GeoBayesianNetwork class + load() factory
   grid.py              GridSpec, align_to_grid(), _reproject(), _bilinear_resample()
   discretize.py        DiscretizationSpec, discretize_array()
   inference.py         run_inference() — unique-combo batching, shannon_entropy()
-  result.py            InferenceResult → to_geotiff() / to_xarray()
+  result.py            InferenceResult → to_geotiff() / to_xarray() / show_map()
   sources/
     _base.py             DataSource ABC: fetch(grid=None) -> RasterData
     array_source.py      ArraySource — in-memory numpy array
