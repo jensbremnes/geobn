@@ -171,3 +171,27 @@ uv run python examples/maritime_norway/run_example.py
 4. If the source needs an optional package, add it to the appropriate extra in `pyproject.toml`.
 5. Update `CLAUDE.md` (this file) and `memory/MEMORY.md`.
 6. Commit and push.
+
+---
+
+## Documentation
+
+MkDocs + Material site, hosted on GitHub Pages at https://jensebr.github.io/geobn.
+Auto-deployed by `.github/workflows/docs.yml` on every push to `main`.
+
+```bash
+# Install docs dependencies
+uv pip install -e ".[docs]"
+
+# Serve locally — browse at http://127.0.0.1:8000
+mkdocs serve
+
+# Build static site (treats warnings as errors)
+mkdocs build --strict
+```
+
+Docs pages live in `docs/`. The `[docs]` extra in `pyproject.toml` pins
+`mkdocs`, `mkdocs-material`, and `mkdocstrings[python]`.
+
+When adding a new source, also add a `:::` directive for it in the appropriate
+`docs/api/sources/*.md` page.

@@ -1,0 +1,74 @@
+site_name: geobn
+site_url: https://jensebr.github.io/geobn
+site_description: Pixel-wise Bayesian network inference over geospatial data
+repo_url: https://github.com/jensebr/geobn
+repo_name: jensebr/geobn
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: teal
+      accent: cyan
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: teal
+      accent: cyan
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - toc.integrate
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - attr_list
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            show_source: false
+            show_root_heading: true
+            show_root_full_path: false
+            members_order: source
+            separate_signature: true
+            docstring_style: google
+
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - How it works: concepts.md
+  - API Reference:
+    - GeoBayesianNetwork: api/network.md
+    - InferenceResult: api/result.md
+    - Data Sources:
+      - Overview: api/sources/index.md
+      - Core sources: api/sources/core.md
+      - Weather sources: api/sources/weather.md
+      - Terrain & Bathymetry: api/sources/terrain.md
+      - Ocean & AIS: api/sources/ocean.md
+      - Generic WCS: api/sources/wcs.md
+    - Internals: api/internals.md
+  - Examples:
+    - Lyngen Alps (Avalanche): examples/lyngen_alps.md
+    - Maritime Norway: examples/maritime_norway.md
+  - Contributing: contributing.md
