@@ -1,6 +1,8 @@
 """Kartverket (Norwegian Mapping Authority) Digital Terrain Model source."""
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 
 from .._types import RasterData
@@ -38,9 +40,17 @@ class KartverketDTMSource(DataSource):
         * ``"dom10"`` — seamless LiDAR surface model (includes vegetation/buildings).
     timeout:
         HTTP request timeout in seconds.
+    cache_dir:
+        Optional path to a directory for caching fetched rasters on disk.
+        On a cache hit the HTTP request is skipped entirely.
     """
 
-    def __init__(self, layer: str = "dtm10", timeout: int = 60) -> None:
+    def __init__(
+        self,
+        layer: str = "dtm10",
+        timeout: int = 60,
+        cache_dir: str | Path | None = None,
+    ) -> None:
         if layer not in _LAYER_MAP:
             raise ValueError(
                 f"Unknown Kartverket layer {layer!r}. "
@@ -55,6 +65,7 @@ class KartverketDTMSource(DataSource):
             version="1.0.0",
             format="GeoTIFF",
             timeout=timeout,
+            cache_dir=cache_dir,
         )
 
     def fetch(self, grid: GridSpec | None = None) -> RasterData:

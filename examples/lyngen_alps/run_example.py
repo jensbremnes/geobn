@@ -68,6 +68,7 @@ RECENT_SNOW_CM = 30.0   # cm  — heavy recent snowfall (typical Lyngen winter)
 AIR_TEMP_C     = -5.0   # °C  — cold but not extreme
 
 OUT_DIR = Path(__file__).parent / "output"
+CACHE_DIR = Path(__file__).parent / "cache"  # terrain cached here after first run
 
 
 # ---------------------------------------------------------------------------
@@ -144,9 +145,9 @@ def main() -> None:
     print(f"Grid        : {H} × {W} pixels at {RESOLUTION}° (~200 m)")
 
     # ── 1. Fetch Kartverket DTM ────────────────────────────────────────────
-    print("\nFetching Kartverket DTM (requires internet) ...")
+    print("\nFetching Kartverket DTM (cached after first run) ...")
     try:
-        dtm_data = geobn.KartverketDTMSource().fetch(grid=ref_grid)
+        dtm_data = geobn.KartverketDTMSource(cache_dir=CACHE_DIR).fetch(grid=ref_grid)
     except Exception as exc:
         sys.exit(f"ERROR fetching DTM: {exc}")
 

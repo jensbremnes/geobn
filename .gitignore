@@ -10,5 +10,6 @@ htmlcov/
 *.tif
 *.geotiff
 output/
+cache/
 private/
 *.DS_Store

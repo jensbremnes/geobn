@@ -9,6 +9,8 @@ Provides:
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 
 from .._types import RasterData
@@ -38,11 +40,19 @@ class EMODnetBathymetrySource(DataSource):
         * ``"emodnet:stdev"`` — depth uncertainty (standard deviation).
     timeout:
         HTTP request timeout in seconds.
+    cache_dir:
+        Optional path to a directory for caching fetched rasters on disk.
+        On a cache hit the HTTP request is skipped entirely.
     """
 
     _VALID_LAYERS = frozenset({"emodnet:mean", "emodnet:stdev"})
 
-    def __init__(self, layer: str = "emodnet:mean", timeout: int = 60) -> None:
+    def __init__(
+        self,
+        layer: str = "emodnet:mean",
+        timeout: int = 60,
+        cache_dir: str | Path | None = None,
+    ) -> None:
         if layer not in self._VALID_LAYERS:
             raise ValueError(
                 f"Unknown EMODnet layer {layer!r}. "
@@ -56,6 +66,7 @@ class EMODnetBathymetrySource(DataSource):
             version="2.0.1",
             format="image/tiff",
             timeout=timeout,
+            cache_dir=cache_dir,
         )
 
     def fetch(self, grid: GridSpec | None = None) -> RasterData:
@@ -104,6 +115,7 @@ class EMODnetShippingDensitySource(DataSource):
         ship_type: str = "all",
         year: int = 2022,
         timeout: int = 60,
+        cache_dir: str | Path | None = None,
     ) -> None:
         if ship_type not in self._VALID_SHIP_TYPES:
             raise ValueError(
@@ -120,6 +132,7 @@ class EMODnetShippingDensitySource(DataSource):
             version="1.1.1",
             format="image/tiff",
             timeout=timeout,
+            cache_dir=cache_dir,
         )
 
     def fetch(self, grid: GridSpec | None = None) -> RasterData:

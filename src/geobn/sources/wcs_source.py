@@ -1,6 +1,8 @@
 """Generic OGC Web Coverage Service (WCS) source."""
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import requests
 
@@ -28,6 +30,10 @@ class WCSSource(DataSource):
         Output format MIME type (default ``"image/tiff"``).
     timeout:
         HTTP request timeout in seconds.
+    cache_dir:
+        Optional path to a directory for caching fetched rasters on disk.
+        On a cache hit the HTTP request is skipped entirely.  Useful for
+        static sources (terrain, bathymetry) where the data never changes.
     """
 
     def __init__(
@@ -37,12 +43,14 @@ class WCSSource(DataSource):
         version: str = "2.0.1",
         format: str = "image/tiff",
         timeout: int = 60,
+        cache_dir: str | Path | None = None,
     ) -> None:
         self._url = url
         self._layer = layer
         self._version = version
         self._format = format
         self._timeout = timeout
+        self._cache_dir = Path(cache_dir).expanduser() if cache_dir is not None else None
 
     # ------------------------------------------------------------------
     # DataSource interface
@@ -67,6 +75,20 @@ class WCSSource(DataSource):
         lon_min, lat_min, lon_max, lat_max = grid.extent_wgs84()
         H, W = grid.shape
 
+        # ── Cache check ───────────────────────────────────────────────────
+        if self._cache_dir is not None:
+            from ._cache import _load_cached, _make_cache_path, _save_cached  # noqa: PLC0415
+            cache_key = {
+                "url": self._url, "layer": self._layer, "version": self._version,
+                "lon_min": round(lon_min, 8), "lat_min": round(lat_min, 8),
+                "lon_max": round(lon_max, 8), "lat_max": round(lat_max, 8),
+                "H": H, "W": W,
+            }
+            cache_path = _make_cache_path(self._cache_dir, cache_key)
+            cached = _load_cached(cache_path)
+            if cached is not None:
+                return cached
+
         if self._version.startswith("2"):
             params = self._build_params_v2(lon_min, lat_min, lon_max, lat_max)
         elif self._version.startswith("1.0"):
@@ -87,7 +109,13 @@ class WCSSource(DataSource):
                 crs = src.crs.to_string()
                 transform = src.transform
 
-        return RasterData(array=array, crs=crs, transform=transform)
+        result = RasterData(array=array, crs=crs, transform=transform)
+
+        # ── Save to cache ─────────────────────────────────────────────────
+        if self._cache_dir is not None:
+            _save_cached(cache_path, result)
+
+        return result
 
     # ------------------------------------------------------------------
     # Internal helpers
