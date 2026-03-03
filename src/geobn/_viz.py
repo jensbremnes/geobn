@@ -114,6 +114,7 @@ def show_map(
     extra_layers: dict[str, np.ndarray] | None = None,
     show_probability_bands: bool = True,
     show_category: bool = True,
+    show_entropy: bool = True,
     score_threshold: float = 0.0,
 ) -> Path:
     """Generate and optionally open an interactive Leaflet map.
@@ -238,12 +239,13 @@ def show_map(
             fg.add_to(m)
 
         # ── Shannon entropy (hidden) ─────────────────────────────────────
-        ent = result.entropy(node)
-        ent_max = math.log2(n_states) if n_states > 1 else 1.0
-        ent_url = _array_to_png_url(ent, "plasma", 0.0, ent_max, overlay_opacity)
-        fg = folium.FeatureGroup(name=f"{node} — entropy", show=False)
-        folium.raster_layers.ImageOverlay(image=ent_url, bounds=bounds, opacity=1.0).add_to(fg)
-        fg.add_to(m)
+        if show_entropy:
+            ent = result.entropy(node)
+            ent_max = math.log2(n_states) if n_states > 1 else 1.0
+            ent_url = _array_to_png_url(ent, "plasma", 0.0, ent_max, overlay_opacity)
+            fg = folium.FeatureGroup(name=f"{node} — entropy", show=False)
+            folium.raster_layers.ImageOverlay(image=ent_url, bounds=bounds, opacity=1.0).add_to(fg)
+            fg.add_to(m)
 
     # ── Extra layers ───────────────────────────────────────────────────────
     if extra_layers:

@@ -75,6 +75,7 @@ class InferenceResult:
         extra_layers: dict[str, np.ndarray] | None = None,
         show_probability_bands: bool = True,
         show_category: bool = True,
+        show_entropy: bool = True,
         score_threshold: float = 0.0,
     ) -> Path:
         """Generate and optionally open an interactive Leaflet map.
@@ -109,7 +110,7 @@ class InferenceResult:
         return _show_map(self, output_dir, filename, overlay_opacity,
                          open_browser, extra_layers,
                          show_probability_bands, show_category,
-                         score_threshold)
+                         show_entropy, score_threshold)
 
     def to_xarray(self) -> "xr.Dataset":
         """Return an xarray Dataset with spatial coordinates.

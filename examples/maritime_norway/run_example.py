@@ -206,10 +206,8 @@ def main() -> None:
         "wind_speed",
         geobn.METLocationForecastSource("wind_speed", sample_points=5),
     )
-    bn.set_input(
-        "vessel_density",
-        geobn.EMODnetShippingDensitySource(ship_type="all", year=2022, cache_dir=CACHE_DIR),
-    )
+    density_src = geobn.EMODnetShippingDensitySource(ship_type="all", year=2022, cache_dir=CACHE_DIR)
+    bn.set_input("vessel_density", density_src)
 
     # ── 5. Discretizations ────────────────────────────────────────────────
     bn.set_discretization("wave_height",    [0, 0.5, 2.0, 10.0],   ["calm", "moderate", "rough"])
@@ -254,9 +252,19 @@ def main() -> None:
 
     # ── 9. Interactive map ─────────────────────────────────────────────────
     try:
+        from geobn.grid import align_to_grid
+        density_rd = density_src.fetch(grid=ref_grid)          # hits disk cache
+        density_arr = align_to_grid(density_rd, ref_grid).array
+
         html_path = result.show_map(
             OUT_DIR,
-            extra_layers={"Water depth (m)": depth_m},
+            extra_layers={
+                "Water depth (m)": depth_m,
+                "Vessel traffic density": density_arr,
+            },
+            show_probability_bands=False,
+            show_category=False,
+            show_entropy=False,
         )
         print(f"\nInteractive map opened in browser → {html_path}")
         print("  Use the layer control (top-right) to switch overlays.")
