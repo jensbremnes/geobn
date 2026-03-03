@@ -73,6 +73,8 @@ class InferenceResult:
         overlay_opacity: float = 0.65,
         open_browser: bool = True,
         extra_layers: dict[str, np.ndarray] | None = None,
+        show_probability_bands: bool = True,
+        show_category: bool = True,
     ) -> Path:
         """Generate and optionally open an interactive Leaflet map.
 
@@ -91,6 +93,10 @@ class InferenceResult:
         extra_layers:
             Additional named (H, W) arrays to include as overlays
             (e.g. ``{"Slope angle (°)": slope_deg}``).
+        show_probability_bands:
+            If False, omit the individual P(state) layers (default True).
+        show_category:
+            If False, omit the argmax category layer (default True).
 
         Returns
         -------
@@ -100,7 +106,8 @@ class InferenceResult:
         from ._viz import show_map as _show_map  # noqa: PLC0415
 
         return _show_map(self, output_dir, filename, overlay_opacity,
-                         open_browser, extra_layers)
+                         open_browser, extra_layers,
+                         show_probability_bands, show_category)
 
     def to_xarray(self) -> "xr.Dataset":
         """Return an xarray Dataset with spatial coordinates.

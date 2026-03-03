@@ -234,6 +234,8 @@ def main() -> None:
         html_path = result.show_map(
             OUT_DIR,
             extra_layers={"Slope angle (°)": slope_deg},
+            show_probability_bands=False,
+            show_category=False,
         )
         print(f"\nInteractive map opened in browser → {html_path}")
         print("  Use the layer control (top-right) to switch overlays.")

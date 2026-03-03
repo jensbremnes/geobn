@@ -112,6 +112,8 @@ def show_map(
     overlay_opacity: float = 0.65,
     open_browser: bool = True,
     extra_layers: dict[str, np.ndarray] | None = None,
+    show_probability_bands: bool = True,
+    show_category: bool = True,
 ) -> Path:
     """Generate and optionally open an interactive Leaflet map.
 
@@ -188,8 +190,9 @@ def show_map(
         attr='© <a href="https://www.kartverket.no/">Kartverket</a>',
         name="Kartverket Topo (Norway)",
         max_zoom=18,
+        show=False,
     ).add_to(m)
-    folium.TileLayer("OpenStreetMap", name="OpenStreetMap").add_to(m)
+    folium.TileLayer("OpenStreetMap", name="OpenStreetMap", show=False).add_to(m)
 
     # ── Inference result layers ────────────────────────────────────────────
     for node, probs in result.probabilities.items():
@@ -211,22 +214,24 @@ def show_map(
         cb.add_to(m)
 
         # ── Individual probability bands (all hidden) ───────────────────
-        state_cmaps = {0: "YlGn", n_states - 1: "YlOrRd"}   # first=green, last=red
-        for i, state in enumerate(states):
-            cmap_name = state_cmaps.get(i, "YlOrBr")
-            img_url = _array_to_png_url(probs[..., i], cmap_name, 0.0, 1.0, overlay_opacity)
-            fg = folium.FeatureGroup(name=f"P({state})", show=False)
-            folium.raster_layers.ImageOverlay(image=img_url, bounds=bounds, opacity=1.0).add_to(fg)
-            fg.add_to(m)
+        if show_probability_bands:
+            state_cmaps = {0: "YlGn", n_states - 1: "YlOrRd"}   # first=green, last=red
+            for i, state in enumerate(states):
+                cmap_name = state_cmaps.get(i, "YlOrBr")
+                img_url = _array_to_png_url(probs[..., i], cmap_name, 0.0, 1.0, overlay_opacity)
+                fg = folium.FeatureGroup(name=f"P({state})", show=False)
+                folium.raster_layers.ImageOverlay(image=img_url, bounds=bounds, opacity=1.0).add_to(fg)
+                fg.add_to(m)
 
         # ── Argmax risk category (hidden) ───────────────────────────────
-        valid_mask = np.isfinite(probs[..., 0])
-        category = np.full(probs.shape[:2], np.nan)
-        category[valid_mask] = np.argmax(probs[valid_mask], axis=-1).astype(float)
-        cat_url = _discrete_array_to_png_url(category, n_states, overlay_opacity)
-        fg = folium.FeatureGroup(name=f"{node} — category", show=False)
-        folium.raster_layers.ImageOverlay(image=cat_url, bounds=bounds, opacity=1.0).add_to(fg)
-        fg.add_to(m)
+        if show_category:
+            valid_mask = np.isfinite(probs[..., 0])
+            category = np.full(probs.shape[:2], np.nan)
+            category[valid_mask] = np.argmax(probs[valid_mask], axis=-1).astype(float)
+            cat_url = _discrete_array_to_png_url(category, n_states, overlay_opacity)
+            fg = folium.FeatureGroup(name=f"{node} — category", show=False)
+            folium.raster_layers.ImageOverlay(image=cat_url, bounds=bounds, opacity=1.0).add_to(fg)
+            fg.add_to(m)
 
         # ── Shannon entropy (hidden) ─────────────────────────────────────
         ent = result.entropy(node)
