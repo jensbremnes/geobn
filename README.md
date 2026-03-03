@@ -24,21 +24,26 @@ import geobn
 from pathlib import Path
 
 # Load a Bayesian network from a .bif file
-bn = geobn.load(Path("fire_risk.bif"))
+bn = geobn.load(Path("avalanche_risk.bif"))
 
 # Attach data sources to evidence nodes
-bn.set_input("slope",    geobn.ArraySource(slope_array,    crs="EPSG:32632", transform=transform))
-bn.set_input("rainfall", geobn.ArraySource(rainfall_array, crs="EPSG:32632", transform=transform))
+# slope_angle and aspect are derived from a real Kartverket DEM (see the example)
+bn.set_input("slope_angle", geobn.ArraySource(slope_deg,    crs="EPSG:4326", transform=transform))
+bn.set_input("aspect",      geobn.ArraySource(north_facing, crs="EPSG:4326", transform=transform))
+bn.set_input("recent_snow", geobn.ConstantSource(30.0))   # 30 cm snowfall
+bn.set_input("temperature", geobn.ConstantSource(-5.0))   # -5°C
 
 # Define breakpoints for continuous → discrete conversion
-bn.set_discretization("slope",    [0, 10, 30, 90],  ["flat", "moderate", "steep"])
-bn.set_discretization("rainfall", [0, 25, 75, 200], ["low",  "medium",   "high"])
+bn.set_discretization("slope_angle", [0, 25, 40, 90],   ["gentle", "steep", "extreme"])
+bn.set_discretization("aspect",      [0.0, 0.5, 1.5],   ["favorable", "unfavorable"])
+bn.set_discretization("recent_snow", [0, 10, 25, 150],  ["light", "moderate", "heavy"])
+bn.set_discretization("temperature", [-40, -8, -2, 15], ["cold", "moderate", "warming"])
 
-# Run inference
-result = bn.infer(query=["fire_risk"])
+# Run pixel-wise inference
+result = bn.infer(query=["avalanche_risk"])
 
-probs = result.probabilities["fire_risk"]   # (H, W, 3) — one band per state
-ent   = result.entropy("fire_risk")         # (H, W)    — Shannon entropy in bits
+probs = result.probabilities["avalanche_risk"]  # (H, W, 3) — one band per state
+ent   = result.entropy("avalanche_risk")        # (H, W)    — Shannon entropy in bits
 
 # Export
 result.to_xarray()          # xarray Dataset  (no rasterio needed)
@@ -77,14 +82,16 @@ DataSources  →  align to grid  →  discretize  →  BN inference  →  Infere
 
 | Example | Description |
 |---|---|
-| [`examples/synthetic_fire_risk/`](examples/synthetic_fire_risk/) | Offline example with generated slope + rainfall arrays |
-| [`examples/calabria_wildfire/`](examples/calabria_wildfire/) | Real-data example: Copernicus DEM + Open-Meteo weather, Calabria, Italy |
+| [`examples/lyngen_alps/`](examples/lyngen_alps/) | Avalanche risk: real Kartverket DTM + configurable weather, Lyngen Alps, Norway |
+| [`examples/calabria_wildfire/`](examples/calabria_wildfire/) | Wildfire risk: Copernicus DEM + Open-Meteo weather, Calabria, Italy |
+| [`examples/maritime_norway/`](examples/maritime_norway/) | Maritime navigation risk: EMODnet Bathymetry + MET Norway + AIS density |
 
-Run either from the repo root:
+Run from the repo root:
 
 ```bash
-uv run python examples/synthetic_fire_risk/run_example.py
+uv run python examples/lyngen_alps/run_example.py
 uv run python examples/calabria_wildfire/run_example.py
+uv run python examples/maritime_norway/run_example.py
 ```
 
 ---

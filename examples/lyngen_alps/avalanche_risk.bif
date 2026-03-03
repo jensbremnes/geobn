@@ -1,0 +1,110 @@
+// Bayesian network for avalanche risk assessment
+// Study area: Lyngen Alps, Tromsø county, northern Norway
+//
+// Structure:
+//   slope_angle ──┐
+//                  ├──► terrain_factor ──┐
+//   aspect ────────┘                     ├──► avalanche_risk
+//   recent_snow ──┐                      │
+//                  ├──► weather_factor ──┘
+//   temperature ──┘
+
+network avalanche_risk_bn {}
+
+// ── Root nodes ──────────────────────────────────────────────────────────────
+
+variable slope_angle {
+  type discrete [ 3 ] { gentle, steep, extreme };
+}
+
+variable aspect {
+  type discrete [ 2 ] { favorable, unfavorable };
+}
+
+variable recent_snow {
+  type discrete [ 3 ] { light, moderate, heavy };
+}
+
+variable temperature {
+  type discrete [ 3 ] { cold, moderate, warming };
+}
+
+// ── Intermediate nodes ───────────────────────────────────────────────────────
+
+variable terrain_factor {
+  type discrete [ 3 ] { low, medium, high };
+}
+
+variable weather_factor {
+  type discrete [ 3 ] { stable, elevated, dangerous };
+}
+
+// ── Output node ──────────────────────────────────────────────────────────────
+
+variable avalanche_risk {
+  type discrete [ 3 ] { low, medium, high };
+}
+
+// ── Root node priors (replaced by data at inference time) ────────────────────
+
+probability ( slope_angle ) {
+  table 0.333, 0.333, 0.334;
+}
+
+probability ( aspect ) {
+  table 0.5, 0.5;
+}
+
+probability ( recent_snow ) {
+  table 0.333, 0.333, 0.334;
+}
+
+probability ( temperature ) {
+  table 0.333, 0.333, 0.334;
+}
+
+// ── P(terrain_factor | slope_angle, aspect) ──────────────────────────────────
+// Discretization: slope_angle ← [0, 25, 40, 90]°
+//                 aspect      ← 0=south-facing (favorable), 1=north-facing (unfavorable)
+// P(low, medium, high) for each parent combination:
+
+probability ( terrain_factor | slope_angle, aspect ) {
+  (gentle,  favorable)    0.90, 0.08, 0.02;
+  (gentle,  unfavorable)  0.80, 0.15, 0.05;
+  (steep,   favorable)    0.25, 0.55, 0.20;
+  (steep,   unfavorable)  0.10, 0.35, 0.55;
+  (extreme, favorable)    0.20, 0.45, 0.35;
+  (extreme, unfavorable)  0.08, 0.27, 0.65;
+}
+
+// ── P(weather_factor | recent_snow, temperature) ─────────────────────────────
+// Discretization: recent_snow ← [0, 10, 25, 150] cm
+//                 temperature ← [-40, -8, -2, 15]°C
+// P(stable, elevated, dangerous) for each parent combination:
+
+probability ( weather_factor | recent_snow, temperature ) {
+  (light,    cold)      0.85, 0.12, 0.03;
+  (light,    moderate)  0.75, 0.20, 0.05;
+  (light,    warming)   0.50, 0.38, 0.12;
+  (moderate, cold)      0.40, 0.45, 0.15;
+  (moderate, moderate)  0.25, 0.45, 0.30;
+  (moderate, warming)   0.10, 0.30, 0.60;
+  (heavy,    cold)      0.15, 0.35, 0.50;
+  (heavy,    moderate)  0.08, 0.27, 0.65;
+  (heavy,    warming)   0.03, 0.12, 0.85;
+}
+
+// ── P(avalanche_risk | terrain_factor, weather_factor) ───────────────────────
+// P(low, medium, high) for each parent combination:
+
+probability ( avalanche_risk | terrain_factor, weather_factor ) {
+  (low,    stable)     0.92, 0.07, 0.01;
+  (low,    elevated)   0.70, 0.25, 0.05;
+  (low,    dangerous)  0.40, 0.45, 0.15;
+  (medium, stable)     0.45, 0.42, 0.13;
+  (medium, elevated)   0.20, 0.50, 0.30;
+  (medium, dangerous)  0.08, 0.27, 0.65;
+  (high,   stable)     0.25, 0.45, 0.30;
+  (high,   elevated)   0.07, 0.28, 0.65;
+  (high,   dangerous)  0.02, 0.13, 0.85;
+}
