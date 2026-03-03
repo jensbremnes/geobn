@@ -254,7 +254,7 @@ def main() -> None:
     try:
         from geobn.grid import align_to_grid
         density_rd = density_src.fetch(grid=ref_grid)          # hits disk cache
-        density_arr = align_to_grid(density_rd, ref_grid).array
+        density_arr = align_to_grid(density_rd, ref_grid)
 
         html_path = result.show_map(
             OUT_DIR,
