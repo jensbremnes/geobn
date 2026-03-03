@@ -9,8 +9,14 @@ Bayesian network inference over geospatial data.
 ## Install
 
 ```bash
-pip install geobn                # core (no rasterio)
-pip install "geobn[io]"          # + GeoTIFF export via rasterio
+pip install geobn                # core — minimal, for embedding or integration
+pip install "geobn[full]"        # full — adds GeoTIFF I/O, xarray output, interactive maps
+```
+
+For specialised data sources:
+```bash
+pip install "geobn[ocean]"       # Copernicus Marine / HubOcean (requires credentials)
+pip install "geobn[full,ocean]"  # everything
 ```
 
 Requires Python ≥ 3.13.

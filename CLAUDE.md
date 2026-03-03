@@ -27,11 +27,12 @@ DataSources → align to reference grid → discretize → BN inference → Infe
 ```
 
 - Python ≥ 3.13, managed with `uv`.
-- Core deps: `pgmpy`, `numpy`, `xarray`, `requests`, `pyproj`, `affine`.
+- Core deps: `pgmpy`, `numpy`, `requests`, `pyproj`, `affine`.
 - Optional `[io]` extra: `rasterio` — required for GeoTIFF read/write.
+- Optional `[viz]` extra: `folium>=0.14`, `matplotlib>=3.0` — required for `result.show_map()`.
 - Optional `[ocean]` extra: `copernicusmarine>=2.0`, `pystac-client>=0.7`.
-- Optional `[viz]` extra: `folium>=0.14` — required for `result.show_map()`.
-- Dev extra installs `pytest` and `rasterio`.
+- Optional `[full]` extra: `[io,viz]` + `xarray>=2024.1` — recommended for office/analysis use.
+- Dev extra installs `geobn[full]` + `pytest`.
 
 ---
 
