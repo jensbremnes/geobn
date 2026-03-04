@@ -541,7 +541,7 @@ requires-dist = [
     { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9.5,<10.0" },
     { name = "mkdocstrings", extras = ["python"], marker = "extra == 'docs'", specifier = ">=0.25" },
     { name = "numpy", specifier = ">=1.26" },
-    { name = "pgmpy", specifier = ">=0.1.25" },
+    { name = "pgmpy", specifier = ">=1.0" },
     { name = "pyproj", specifier = ">=3.6" },
     { name = "pystac-client", marker = "extra == 'ocean'", specifier = ">=0.7" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
