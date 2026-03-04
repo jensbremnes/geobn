@@ -25,7 +25,7 @@ Full docs (API reference, concepts, examples) are hosted at:
 uv pip install git+https://github.com/jensebr/geobn.git
 ```
 
-Or clone and install in editable mode:
+To also run the bundled examples, clone the repo instead:
 
 ```bash
 git clone https://github.com/jensebr/geobn.git
