@@ -140,17 +140,6 @@ DataSources  →  align to grid  →  discretize  →  BN inference  →  Infere
 
 ---
 
-## Development
-
-If you want to work on `geobn` itself (rather than just use it), this is how to install it in editable mode and run the test suite locally:
-
-```bash
-uv pip install -e ".[dev]"
-uv run pytest tests/ -v
-```
-
----
-
 ## Academic foundation
 
 `geobn` is a software realisation of ideas developed during the author's PhD research. If you use this library in academic work, please consider citing the following paper:
