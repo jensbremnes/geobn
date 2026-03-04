@@ -1,5 +1,7 @@
 # geobn
 
+> **Beta** — the API is functional and tested, but may change before a stable 1.0 release.
+
 Bayesian network inference over geospatial data.
 Enabling probabilistic AI to turn heterogeneous data sources into insight over geographical areas. The library is independent of domain, and may be used for, e.g., environmental risk assessment and risk‑informed route planning.
 
@@ -114,3 +116,20 @@ If you want to work on `geobn` itself (rather than just use it), this is how to 
 uv pip install -e ".[dev]"
 uv run pytest tests/ -v
 ```
+
+---
+
+## Academic foundation
+
+`geobn` is a software realisation of ideas developed during the author's PhD research. If you use this library in academic work, please consider citing the following paper:
+
+> J. E. Bremnes, I. B. Utne, T. R. Krogstad, and A. J. Sørensen,
+> "Holistic Risk Modeling and Path Planning for Marine Robotics,"
+> *IEEE Journal of Oceanic Engineering*, vol. 50, no. 1, pp. 252–275, 2025.
+> DOI: [10.1109/JOE.2024.3432935](https://doi.org/10.1109/JOE.2024.3432935)
+
+---
+
+## AI use
+
+Parts of this codebase were written with the assistance of Claude (Anthropic). All concepts, design decisions, and research ideas originate with the author.
