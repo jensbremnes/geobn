@@ -153,4 +153,4 @@ DataSources  →  align to grid  →  discretize  →  BN inference  →  Infere
 
 ## Declaration of AI use
 
-Parts of this codebase were written with the assistance of Claude (Anthropic). All concepts, design decisions, and research ideas originate with the author.
+This library was written with the assistance of Claude (Anthropic). All concepts, design decisions, and research ideas originate with the author.
