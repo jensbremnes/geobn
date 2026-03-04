@@ -8,7 +8,7 @@ Bayesian network inference over geospatial data.
 
 > **Under development** — the API is functional and tested, but may change before a stable 1.0 release.
 
-Supporting probabilistic AI by turning heterogeneous data sources (offline and real-time) into insight over geographical areas. The library is independent of domain, and may be used for, e.g., environmental risk assessment and risk‑informed route planning.ßß
+Supporting probabilistic AI by turning heterogeneous data sources (offline and real-time) into insight over geographical areas. The library is independent of domain, and may be used for, e.g., environmental risk assessment and risk‑informed route planning.
 
 `geobn` lets you wire data sources — rasters, remote APIs, or plain scalars — directly into a Bayesian network and run pixel-wise inference, producing posterior probability maps and entropy rasters.
 
