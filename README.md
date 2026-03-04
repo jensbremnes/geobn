@@ -8,6 +8,8 @@ Enabling probabilistic AI to turn heterogeneous data sources into insight over g
 Full docs (API reference, concepts, examples) are hosted at:
 **https://jensebr.github.io/geobn**
 
+![geobn demo](docs/assets/demo.gif)
+
 ---
 
 ## Install
