@@ -104,13 +104,39 @@ DataSources  →  align to grid  →  discretize  →  BN inference  →  Infere
 
 ## Data sources
 
+**Core**
+
 | Class | Use case |
 |---|---|
 | `ArraySource(array, crs, transform)` | In-memory numpy array (QGIS, preprocessed data) |
+| `ConstantSource(value)` | Broadcast a scalar over the entire grid |
 | `RasterSource(path)` | Local GeoTIFF / any rasterio-readable file |
 | `URLSource(url)` | Remote Cloud-Optimised GeoTIFF |
-| `OpenMeteoSource(variable, date)` | Live weather from [open-meteo.com](https://open-meteo.com/) |
-| `ConstantSource(value)` | Broadcast a scalar over the entire grid |
+| `WCSSource(url, layer)` | Generic OGC WCS endpoint |
+
+**Weather**
+
+| Class | Use case |
+|---|---|
+| `OpenMeteoSource(variable, date)` | Historical/forecast weather from [open-meteo.com](https://open-meteo.com/) |
+| `METOceanForecastSource(variable)` | Wave height, current speed (MET Norway) |
+| `METLocationForecastSource(variable)` | Wind speed/direction (MET Norway) |
+
+**Terrain & bathymetry**
+
+| Class | Use case |
+|---|---|
+| `KartverketDTMSource()` | Norwegian 10 m Digital Terrain Model |
+| `EMODnetBathymetrySource()` | European seabed depth |
+| `EMODnetShippingDensitySource()` | Historical vessel traffic density |
+
+**Ocean & maritime**
+
+| Class | Use case |
+|---|---|
+| `CopernicusMarineSource(dataset, variable)` | CMEMS ocean model data (`geobn[ocean]`) |
+| `HubOceanSource(collection, variable)` | HubOcean STAC catalog (`geobn[ocean]`) |
+| `BarentswatchAISSource(client_id, secret)` | Live/historical AIS vessel positions |
 
 ---
 
