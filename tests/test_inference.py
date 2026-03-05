@@ -11,7 +11,7 @@ class TestRunInference:
     def test_single_pixel_known_evidence(self, fire_risk_model):
         """For uniform 'flat' slope and 'low' rainfall, fire risk should be mostly low."""
         H, W = 2, 2
-        evidence_indices = {
+        evidence_state_grids = {
             "slope": np.zeros((H, W), dtype=np.int16),     # all "flat"
             "rainfall": np.zeros((H, W), dtype=np.int16),  # all "low"
         }
@@ -23,7 +23,7 @@ class TestRunInference:
 
         result = run_inference(
             model=fire_risk_model,
-            evidence_indices=evidence_indices,
+            evidence_state_grids=evidence_state_grids,
             evidence_state_names=evidence_state_names,
             query_nodes=["fire_risk"],
             query_state_names={"fire_risk": ["low", "medium", "high"]},
@@ -39,7 +39,7 @@ class TestRunInference:
 
     def test_nodata_propagates_nan(self, fire_risk_model):
         H, W = 3, 3
-        evidence_indices = {
+        evidence_state_grids = {
             "slope": np.zeros((H, W), dtype=np.int16),
             "rainfall": np.zeros((H, W), dtype=np.int16),
         }
@@ -48,7 +48,7 @@ class TestRunInference:
 
         result = run_inference(
             model=fire_risk_model,
-            evidence_indices=evidence_indices,
+            evidence_state_grids=evidence_state_grids,
             evidence_state_names={
                 "slope": ["flat", "moderate", "steep"],
                 "rainfall": ["low", "medium", "high"],
@@ -64,7 +64,7 @@ class TestRunInference:
 
     def test_all_nodata_returns_nan_array(self, fire_risk_model):
         H, W = 2, 2
-        evidence_indices = {
+        evidence_state_grids = {
             "slope": np.zeros((H, W), dtype=np.int16),
             "rainfall": np.zeros((H, W), dtype=np.int16),
         }
@@ -72,7 +72,7 @@ class TestRunInference:
 
         result = run_inference(
             model=fire_risk_model,
-            evidence_indices=evidence_indices,
+            evidence_state_grids=evidence_state_grids,
             evidence_state_names={
                 "slope": ["flat", "moderate", "steep"],
                 "rainfall": ["low", "medium", "high"],
@@ -86,14 +86,14 @@ class TestRunInference:
     def test_unique_combo_deduplication(self, fire_risk_model):
         """All pixels identical → inference runs once, all pixels get same result."""
         H, W = 5, 5
-        evidence_indices = {
+        evidence_state_grids = {
             "slope": np.full((H, W), 2, dtype=np.int16),    # all "steep"
             "rainfall": np.full((H, W), 2, dtype=np.int16),  # all "high"
         }
         nodata_mask = np.zeros((H, W), dtype=bool)
         result = run_inference(
             model=fire_risk_model,
-            evidence_indices=evidence_indices,
+            evidence_state_grids=evidence_state_grids,
             evidence_state_names={
                 "slope": ["flat", "moderate", "steep"],
                 "rainfall": ["low", "medium", "high"],

@@ -10,7 +10,7 @@ tiny even for very large rasters.
 
 Data flow
 ---------
-evidence_indices  dict[node, (H, W) int16]   state index per pixel
+evidence_state_grids  dict[node, (H, W) int16]   state index per pixel
                   (-1 = NoData)
 nodata_mask       (H, W) bool                True where any input is NaN
 
@@ -26,7 +26,7 @@ from pgmpy.inference import VariableElimination
 
 def run_inference(
     model,
-    evidence_indices: dict[str, np.ndarray],
+    evidence_state_grids: dict[str, np.ndarray],
     evidence_state_names: dict[str, list[str]],
     query_nodes: list[str],
     query_state_names: dict[str, list[str]],
@@ -39,7 +39,7 @@ def run_inference(
     ----------
     model:
         A fitted pgmpy BayesianNetwork.
-    evidence_indices:
+    evidence_state_grids:
         Mapping from evidence node name to (H, W) int16 array of state indices.
     evidence_state_names:
         Mapping from evidence node name to its ordered list of state labels.
@@ -59,8 +59,8 @@ def run_inference(
     -------
     Mapping from query node name to a (H, W, n_states) float32 array.
     """
-    H, W = next(iter(evidence_indices.values())).shape
-    node_list = list(evidence_indices.keys())
+    H, W = next(iter(evidence_state_grids.values())).shape
+    node_list = list(evidence_state_grids.keys())
 
     valid = ~nodata_mask  # (H, W)
     n_valid = int(valid.sum())
@@ -74,10 +74,10 @@ def run_inference(
     if n_valid == 0:
         return output
 
-    # Stack evidence indices for valid pixels → (n_valid, n_nodes)
-    valid_stack = np.column_stack(
-        [evidence_indices[n][valid].astype(np.int32) for n in node_list]
-    )
+    # For each evidence node, extract the state indices of valid pixels only and
+    # cast to int32 (required for np.unique to handle all nodes with a uniform dtype).
+    valid_indices = [evidence_state_grids[n][valid].astype(np.int32) for n in node_list]
+    valid_stack = np.column_stack(valid_indices)  # (n_valid, n_nodes)
 
     # Find unique evidence combinations
     unique_combos, inverse = np.unique(valid_stack, axis=0, return_inverse=True)
@@ -91,6 +91,8 @@ def run_inference(
     combo_probs: dict[str, list[np.ndarray]] = {node: [] for node in query_nodes}
 
     for combo in unique_combos:
+        # combo holds one integer state index per evidence node; translate back
+        # to the string state labels that pgmpy's query() expects.
         evidence = {
             node_list[i]: evidence_state_names[node_list[i]][combo[i]]
             for i in range(len(node_list))
@@ -111,7 +113,7 @@ def run_inference(
 def run_inference_from_table(
     table: dict[str, np.ndarray],
     node_order: list[str],
-    evidence_indices: dict[str, np.ndarray],
+    evidence_state_grids: dict[str, np.ndarray],
     nodata_mask: np.ndarray,
 ) -> dict[str, np.ndarray]:
     """Map pixel-wise discrete evidence to precomputed probabilities via fancy indexing.
@@ -129,7 +131,7 @@ def run_inference_from_table(
         the first *k* axes correspond to the *k* nodes in *node_order*.
     node_order:
         Evidence node names in the order matching the table axes.
-    evidence_indices:
+    evidence_state_grids:
         Mapping from node name to ``(H, W)`` int array of state indices.
         Nodata pixels (index -1) are masked out via *nodata_mask*.
     nodata_mask:
@@ -145,7 +147,7 @@ def run_inference_from_table(
     # Build index tuple: one (H, W) int array per evidence axis.
     # Advanced indexing on a table of shape (*n_states_per_node, n_query_states)
     # with k arrays of shape (H, W) produces output of shape (H, W, n_query_states).
-    idx = tuple(evidence_indices[n] for n in node_order)
+    idx = tuple(evidence_state_grids[n] for n in node_order)
 
     output: dict[str, np.ndarray] = {}
     for node, tbl in table.items():
@@ -172,5 +174,8 @@ def shannon_entropy(probs: np.ndarray) -> np.ndarray:
     (...) array of entropy values.
     """
     with np.errstate(divide="ignore", invalid="ignore"):
+        # log2(0) is -inf, but by convention 0 * log2(0) = 0 (zero-probability
+        # states contribute nothing to entropy).  np.where substitutes 0.0 for
+        # those terms before the multiplication.
         log2_p = np.where(probs > 0, np.log2(probs), 0.0)
     return -np.sum(probs * log2_p, axis=-1)

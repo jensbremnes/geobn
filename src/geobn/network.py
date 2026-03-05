@@ -318,7 +318,7 @@ class GeoBayesianNetwork:
 
         # ── 3. Fetch, align, and discretize inputs ─────────────────────
         # Frozen nodes with a cached discrete array skip all I/O and compute.
-        evidence_indices: dict[str, np.ndarray] = {}
+        evidence_state_grids: dict[str, np.ndarray] = {}
         evidence_state_names: dict[str, list[str]] = {}
         nodata_mask = np.zeros(ref_grid.shape, dtype=bool)
 
@@ -345,7 +345,7 @@ class GeoBayesianNetwork:
                         self._cached_ref_grid = ref_grid
 
             nodata_mask |= idx < 0
-            evidence_indices[node] = idx
+            evidence_state_grids[node] = idx
             evidence_state_names[node] = spec.labels
 
         # ── 4. Collect query node state names from the BN ──────────────
@@ -364,7 +364,7 @@ class GeoBayesianNetwork:
             probabilities = run_inference_from_table(
                 table=self._inference_table,
                 node_order=self._table_node_order,
-                evidence_indices=evidence_indices,
+                evidence_state_grids=evidence_state_grids,
                 nodata_mask=nodata_mask,
             )
         else:
@@ -376,7 +376,7 @@ class GeoBayesianNetwork:
 
             probabilities = run_inference(
                 model=self._model,
-                evidence_indices=evidence_indices,
+                evidence_state_grids=evidence_state_grids,
                 evidence_state_names=evidence_state_names,
                 query_nodes=query,
                 query_state_names=query_state_names,
