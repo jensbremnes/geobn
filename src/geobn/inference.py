@@ -67,45 +67,67 @@ def run_inference(
 
     # Pre-allocate output arrays filled with NaN
     output: dict[str, np.ndarray] = {}
-    for node in query_nodes:
-        n_states = len(query_state_names[node])
-        output[node] = np.full((H, W, n_states), np.nan, dtype=np.float32)
+    for query_node in query_nodes:
+        n_states = len(query_state_names[query_node])
+        output[query_node] = np.full((H, W, n_states), np.nan, dtype=np.float32)
 
     if n_valid == 0:
         return output
 
-    # For each evidence node, extract the state indices of valid pixels only and
-    # cast to int32 (required for np.unique to handle all nodes with a uniform dtype).
-    valid_indices = [evidence_state_grids[n][valid].astype(np.int32) for n in node_list]
-    valid_stack = np.column_stack(valid_indices)  # (n_valid, n_nodes)
+    # Matrix where each row is a valid pixel and each column is an evidence node.
+    # The value in each cell is the state index of that node. Dim (n_valid, n_nodes).
+    valid_pixel_state_matrix = np.column_stack(
+        [evidence_state_grids[n][valid].astype(np.int32) for n in node_list]
+    )
 
-    # Find unique evidence combinations
-    unique_combos, inverse = np.unique(valid_stack, axis=0, return_inverse=True)
-    # unique_combos: (n_unique, n_nodes)
-    # inverse:       (n_valid,)  maps each valid pixel → unique combo index
+    # Find all distinct combinations of evidence states that appear across valid pixels.
+    # For example, if slope and rainfall each have 3 states, there are at most 9 unique
+    # combinations — and we only need to run inference once per combination, not once per pixel.
+    # If two pixels have identical combinations of evidence states, they appear as one row.
+    #
+    # unique_combos:  one row per distinct combination, e.g. [[0,1], [2,0], [2,2]]
+    # pixel_to_combo: one entry per valid pixel — the row index in unique_combos that
+    #                 pixel belongs to, e.g. [0, 0, 1, 2, 0, ...]
+    unique_combos, pixel_to_combo = np.unique(valid_pixel_state_matrix, axis=0, return_inverse=True)
 
     if ve is None:
         ve = VariableElimination(model)
 
-    # Results per unique combo: dict[node] → list of probability arrays
-    combo_probs: dict[str, list[np.ndarray]] = {node: [] for node in query_nodes}
+    # For each query node, stores the inferred probability distribution for every
+    # unique evidence combination. Distributions are appended in the same order as
+    # unique_combos, so position 0 here always corresponds to row 0 there.
+    combo_probs: dict[str, list[np.ndarray]] = {query_node: [] for query_node in query_nodes}
 
     for combo in unique_combos:
         # combo holds one integer state index per evidence node; translate back
         # to the string state labels that pgmpy's query() expects.
-        evidence = {
+        # Each integer in combo is used as a position to look up the label in
+        # evidence_state_names, e.g. index 2 → "steep".
+        evidence_collection = {
             node_list[i]: evidence_state_names[node_list[i]][combo[i]]
             for i in range(len(node_list))
         }
-        for node in query_nodes:
-            factor = ve.query([node], evidence=evidence, show_progress=False)
-            combo_probs[node].append(factor.values.astype(np.float32))
+        for query_node in query_nodes:
+            # query_result is a pgmpy object wrapping the posterior distribution;
+            # .values gives a 1D array of probabilities, one per state.
+            query_result = ve.query([query_node], evidence=evidence_collection, show_progress=False)
+            combo_probs[query_node].append(query_result.values.astype(np.float32))
 
-    # Map results back to spatial arrays
-    for node in query_nodes:
-        probs_per_combo = np.stack(combo_probs[node], axis=0)  # (n_unique, n_states)
-        flat_probs = probs_per_combo[inverse]                   # (n_valid, n_states)
-        output[node][valid] = flat_probs
+    # Map inference results back to the spatial grid.
+    # For each query node, every valid pixel is assigned the probability distribution
+    # of its evidence combination, then written into the correct position in the output grid.
+    for query_node in query_nodes:
+
+        # Stack per-combo results into a 2D lookup: row i = distribution for combo i.
+        probs_per_combo = np.stack(combo_probs[query_node], axis=0)  # (n_unique, n_states)
+
+        # Use pixel_to_combo to give each valid pixel the distribution of its combo: row i = distribution for pixel i.
+        valid_pixel_probs = probs_per_combo[pixel_to_combo]          # (n_valid, n_states)
+        
+        # Write the probabilities into the valid pixel slots of the output grid —
+        # a 3D array (H, W, n_states) where each pixel holds one probability per state.
+        # NaN pixels are left untouched.
+        output[query_node][valid] = valid_pixel_probs
 
     return output
 
@@ -144,15 +166,15 @@ def run_inference_from_table(
     """
     H, W = nodata_mask.shape
 
-    # Build index tuple: one (H, W) int array per evidence axis.
-    # Advanced indexing on a table of shape (*n_states_per_node, n_query_states)
-    # with k arrays of shape (H, W) produces output of shape (H, W, n_query_states).
-    idx = tuple(evidence_state_grids[n] for n in node_order)
+    # One state-grid per evidence node, ordered to match the axes of the precomputed
+    # table. Used as a combined index so numpy can read the right probabilities for
+    # every pixel in one operation rather than looping over them.
+    node_state_index_tuple = tuple(evidence_state_grids[n] for n in node_order)
 
     output: dict[str, np.ndarray] = {}
     for node, tbl in table.items():
         n_states = tbl.shape[-1]
-        probs = np.asarray(tbl[idx], dtype=np.float32)
+        probs = np.asarray(tbl[node_state_index_tuple], dtype=np.float32)
         # broadcast_to handles the edge case where all indices happen to be scalars
         probs = np.broadcast_to(probs, (H, W, n_states)).copy()
         probs[nodata_mask] = np.nan
