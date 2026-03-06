@@ -6,6 +6,8 @@
 
 Bayesian network inference over geospatial data.
 
+![geobn demo](docs/assets/demo.gif)
+
 > **Under development** — the API is functional and tested, but may change before a stable 1.0 release.
 
 `geobn` lets you turn heterogeneous data sources (offline and real-time) into insight over geographical areas by using techniques in probabilistic AI. The library is domain-agnostic, and may be used for, e.g., environmental risk assessment and risk‑informed route planning.
@@ -14,8 +16,6 @@ This is achieved by wiring different data sources — rasters, remote APIs, or p
 
 Full docs (API reference, concepts, examples) are hosted at:
 **https://jensebr.github.io/geobn**
-
-![geobn demo](docs/assets/demo.gif)
 
 ---
 
