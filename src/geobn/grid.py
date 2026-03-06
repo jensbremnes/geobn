@@ -74,20 +74,20 @@ class GridSpec:
 
     def extent_wgs84(self) -> tuple[float, float, float, float]:
         """Return the bounding box in WGS84 (lon_min, lat_min, lon_max, lat_max)."""
-        height, width = self.shape
+        H, W = self.shape
         grid_transform = self.transform
         # Four corners in the source CRS
         corner_x = [
             grid_transform.c,
-            grid_transform.c + width  * grid_transform.a,
-            grid_transform.c + height * grid_transform.b,
-            grid_transform.c + width  * grid_transform.a + height * grid_transform.b,
+            grid_transform.c + W * grid_transform.a,
+            grid_transform.c + H * grid_transform.b,
+            grid_transform.c + W * grid_transform.a + H * grid_transform.b,
         ]
         corner_y = [
             grid_transform.f,
-            grid_transform.f + width  * grid_transform.d,
-            grid_transform.f + height * grid_transform.e,
-            grid_transform.f + width  * grid_transform.d + height * grid_transform.e,
+            grid_transform.f + W * grid_transform.d,
+            grid_transform.f + H * grid_transform.e,
+            grid_transform.f + W * grid_transform.d + H * grid_transform.e,
         ]
         transformer = Transformer.from_crs(self.crs, "EPSG:4326", always_xy=True)
         lons, lats = transformer.transform(corner_x, corner_y)
@@ -140,11 +140,11 @@ def _reproject(
     dst_transform: Affine,
     dst_shape: tuple[int, int],
 ) -> np.ndarray:
-    height, width = dst_shape
+    H, W = dst_shape
 
     # Pixel-centre coordinates of every destination pixel
-    col_idx = np.arange(width, dtype=np.float64)
-    row_idx = np.arange(height, dtype=np.float64)
+    col_idx = np.arange(W, dtype=np.float64)
+    row_idx = np.arange(H, dtype=np.float64)
     col_grid, row_grid = np.meshgrid(col_idx, row_idx)
 
     # Pixel centre = corner + 0.5
@@ -159,8 +159,8 @@ def _reproject(
     if dst_crs != src_crs:
         crs_transformer = Transformer.from_crs(dst_crs, src_crs, always_xy=True)
         src_x, src_y = crs_transformer.transform(dst_x.ravel(), dst_y.ravel())
-        src_x = src_x.reshape(height, width)
-        src_y = src_y.reshape(height, width)
+        src_x = src_x.reshape(H, W)
+        src_y = src_y.reshape(H, W)
     else:
         src_x, src_y = dst_x, dst_y
 

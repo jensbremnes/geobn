@@ -139,8 +139,8 @@ class GeoBayesianNetwork:
         self._inference_table.clear()
         self._table_node_order = []
         self._table_query_nodes = []
-        grid_height, grid_width = self._grid.shape
-        _log.info("Grid set: %s, resolution=%g, shape=%d×%d", crs, resolution, grid_height, grid_width)
+        H, W = self._grid.shape
+        _log.info("Grid set: %s, resolution=%g, shape=%d×%d", crs, resolution, H, W)
 
     # ------------------------------------------------------------------
     # Real-time optimisation
