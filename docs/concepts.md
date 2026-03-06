@@ -25,12 +25,6 @@ GeNIe/Netica/bnlearn. Use [`geobn.load()`][geobn.load]:
 bn = geobn.load("my_model.bif")
 ```
 
-If you have a GeNIe `.xdsl` file, convert it first:
-
-```bash
-python tools/xdsl_to_bif.py my_model.xdsl my_model.bif
-```
-
 ## Attaching data sources
 
 Each root node (node with no parents) in the BN corresponds to an evidence variable.
