@@ -15,6 +15,8 @@ sources to evidence nodes, configure discretization, and call `infer()`.
     options:
       members:
         - set_input
+        - set_input_array
+        - fetch_raw
         - set_discretization
         - set_grid
         - freeze

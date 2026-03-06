@@ -127,3 +127,45 @@ class TestEndToEnd:
         assert "fire_risk" in ds
         assert "fire_risk_entropy" in ds
         assert ds["fire_risk"].dims == ("state", "y", "x")
+
+
+class TestFetchRawAndSetInputArray:
+    def test_fetch_raw_requires_grid(self, bn):
+        with pytest.raises(RuntimeError, match="set_grid"):
+            bn.fetch_raw(geobn.ConstantSource(1.0))
+
+    def test_fetch_raw_returns_ndarray(self, bn):
+        bn.set_grid("EPSG:4326", 0.1, (0.0, 49.0, 1.0, 50.0))
+        arr = bn.fetch_raw(geobn.ConstantSource(42.0))
+        assert isinstance(arr, np.ndarray)
+        assert arr.shape == bn._grid.shape
+        assert np.all(arr == 42.0)
+
+    def test_fetch_raw_passes_grid_to_source(self, bn, slope_array, reference_transform):
+        bn.set_grid("EPSG:4326", 0.1, (0.0, 49.0, 1.0, 50.0))
+        source = geobn.ArraySource(slope_array, crs="EPSG:4326", transform=reference_transform)
+        arr = bn.fetch_raw(source)
+        assert isinstance(arr, np.ndarray)
+        assert arr.shape == bn._grid.shape
+
+    def test_set_input_array_requires_grid(self, bn, slope_array):
+        with pytest.raises(RuntimeError, match="set_grid"):
+            bn.set_input_array("slope", slope_array)
+
+    def test_set_input_array_registers_source(self, bn, slope_array):
+        bn.set_grid("EPSG:4326", 0.1, (0.0, 49.0, 1.0, 50.0))
+        bn.set_input_array("slope", slope_array)
+        assert "slope" in bn._inputs
+
+    def test_set_input_array_end_to_end(self, bn, slope_array, rainfall_array):
+        bn.set_grid("EPSG:4326", 0.1, (0.0, 49.0, 1.0, 50.0))
+        bn.set_input_array("slope", slope_array)
+        bn.set_input_array("rainfall", rainfall_array)
+        bn.set_discretization("slope", [0, 10, 30, 90], ["flat", "moderate", "steep"])
+        bn.set_discretization("rainfall", [0, 25, 75, 200], ["low", "medium", "high"])
+
+        result = bn.infer(query=["fire_risk"])
+        probs = result.probabilities["fire_risk"]
+        assert probs.shape == (10, 10, 3)
+        valid = ~np.isnan(probs[..., 0])
+        np.testing.assert_allclose(probs[valid].sum(axis=-1), 1.0, atol=1e-5)

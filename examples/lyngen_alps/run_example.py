@@ -49,10 +49,8 @@ import sys
 from pathlib import Path
 
 import numpy as np
-from affine import Affine
 
 import geobn
-from geobn.grid import GridSpec
 
 # ---------------------------------------------------------------------------
 # Study area — Lyngen Alps, Tromsø county, northern Norway
@@ -137,24 +135,24 @@ def main() -> None:
 
     H = round((NORTH - SOUTH) / RESOLUTION)   # 80 rows
     W = round((EAST  - WEST)  / RESOLUTION)   # 240 cols
-    transform = Affine(RESOLUTION, 0, WEST, 0, -RESOLUTION, NORTH)
-    ref_grid = GridSpec(crs=CRS, transform=transform, shape=(H, W))
 
     print("Lyngen Alps Avalanche Risk — geobn demo")
     print(f"Study area  : {WEST}°E – {EAST}°E, {SOUTH}°N – {NORTH}°N")
     print(f"Grid        : {H} × {W} pixels at {RESOLUTION}° (~200 m)")
 
-    # ── 1. Fetch Kartverket DTM ────────────────────────────────────────────
+    # ── 1. Load BN and configure grid ─────────────────────────────────────
+    bif_path = Path(__file__).parent / "avalanche_risk.bif"
+    bn = geobn.load(bif_path)
+    bn.set_grid(CRS, RESOLUTION, (WEST, SOUTH, EAST, NORTH))
+
+    # ── 2. Fetch DTM and derive terrain inputs ────────────────────────────
     print("\nFetching Kartverket DTM (cached after first run) ...")
     try:
-        dtm_data = geobn.KartverketDTMSource(cache_dir=CACHE_DIR).fetch(grid=ref_grid)
+        dem = bn.fetch_raw(geobn.KartverketDTMSource(cache_dir=CACHE_DIR))
     except Exception as exc:
         sys.exit(f"ERROR fetching DTM: {exc}")
 
-    dem = dtm_data.array.copy()
     dem[dem <= 0] = np.nan   # ocean / fjord surfaces (Kartverket returns 0 for sea level)
-
-    # Derive slope and aspect from the DEM.
     slope_deg, north_facing = compute_slope_aspect(dem)
 
     land_pixels = int(np.isfinite(dem).sum())
@@ -163,29 +161,19 @@ def main() -> None:
     print(f"Slope range : {np.nanmin(slope_deg):.1f}° – "
           f"{np.nanmax(slope_deg):.1f}°  (mean: {np.nanmean(slope_deg):.1f}°)")
 
-    # ── 2. Load BN and wire inputs ─────────────────────────────────────────
-    bif_path = Path(__file__).parent / "avalanche_risk.bif"
-    bn = geobn.load(bif_path)
-    bn.set_grid(CRS, RESOLUTION, (WEST, SOUTH, EAST, NORTH))
-
-    bn.set_input(
-        "slope_angle",
-        geobn.ArraySource(slope_deg, crs=CRS, transform=dtm_data.transform),
-    )
-    bn.set_input(
-        "sun_exposure",
-        geobn.ArraySource(north_facing, crs=CRS, transform=dtm_data.transform),
-    )
+    # ── 3. Wire inputs ─────────────────────────────────────────────────────
+    bn.set_input_array("slope_angle",  slope_deg)
+    bn.set_input_array("sun_exposure", north_facing)
     bn.set_input("recent_snow", geobn.ConstantSource(RECENT_SNOW_CM))
-    bn.set_input("temperature", geobn.ConstantSource(AIR_TEMP_C))
+    bn.set_input("temperature",  geobn.ConstantSource(AIR_TEMP_C))
 
-    # ── 3. Discretizations ────────────────────────────────────────────────
+    # ── 4. Discretizations ────────────────────────────────────────────────
     bn.set_discretization("slope_angle", [0, 5, 25, 40, 90], ["flat", "gentle", "steep", "extreme"])
     bn.set_discretization("sun_exposure", [0.0, 0.5, 1.5],   ["favorable", "unfavorable"])
     bn.set_discretization("recent_snow", [0, 10, 25, 150],  ["light", "moderate", "heavy"])
     bn.set_discretization("temperature", [-40, -8, -2, 15], ["cold", "moderate", "warming"])
 
-    # ── 4. Weather scenario summary ────────────────────────────────────────
+    # ── 5. Weather scenario summary ────────────────────────────────────────
     snow_state = (
         "light"    if RECENT_SNOW_CM < 10
         else "moderate" if RECENT_SNOW_CM < 25
@@ -200,7 +188,7 @@ def main() -> None:
     print(f"  Recent snow  : {RECENT_SNOW_CM:.0f} cm   → {snow_state}")
     print(f"  Temperature  : {AIR_TEMP_C:.0f}°C   → {temp_state}")
 
-    # ── 5. Run inference ───────────────────────────────────────────────────
+    # ── 6. Run inference ───────────────────────────────────────────────────
     print("\nRunning BN inference ...")
     try:
         result = bn.infer(query=["avalanche_risk"])
@@ -210,7 +198,7 @@ def main() -> None:
     probs = result.probabilities["avalanche_risk"]   # (H, W, 3)
     ent   = result.entropy("avalanche_risk")          # (H, W)
 
-    # ── 6. Console statistics ──────────────────────────────────────────────
+    # ── 7. Console statistics ──────────────────────────────────────────────
     def bar(val: float, width: int = 20) -> str:
         filled = round(val * width)
         return "█" * filled + "░" * (width - filled)
@@ -230,7 +218,7 @@ def main() -> None:
     print(f"  Steep N-facing slopes (>35°, N-facing)  : P(high) = {p_high_steep_n:.2f}")
     print(f"  Gentle S-facing slopes (<25°, S-facing) : P(high) = {p_high_gentle_s:.2f}")
 
-    # ── 7. Interactive map ─────────────────────────────────────────────────
+    # ── 8. Interactive map ─────────────────────────────────────────────────
     try:
         html_path = result.show_map(
             OUT_DIR,
@@ -245,7 +233,7 @@ def main() -> None:
         print(f"\nSkipping interactive map ({exc})")
         print("  Install folium: pip install geobn[viz]")
 
-    # ── 8. Export GeoTIFF ─────────────────────────────────────────────────
+    # ── 9. Export GeoTIFF ─────────────────────────────────────────────────
     try:
         result.to_geotiff(OUT_DIR)
         tif_path = OUT_DIR / "avalanche_risk.tif"

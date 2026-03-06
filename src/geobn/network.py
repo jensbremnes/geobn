@@ -15,6 +15,7 @@ from .grid import GridSpec, align_to_grid
 from .inference import run_inference, run_inference_from_table
 from .result import InferenceResult
 from .sources._base import DataSource
+from .sources.array_source import ArraySource
 
 
 class GeoBayesianNetwork:
@@ -141,6 +142,55 @@ class GeoBayesianNetwork:
         self._table_query_nodes = []
         H, W = self._grid.shape
         _log.info("Grid set: %s, resolution=%g, shape=%d×%d", crs, resolution, H, W)
+
+    def fetch_raw(self, source: DataSource) -> np.ndarray:
+        """Fetch a data source using the BN's grid and return a plain numpy array.
+
+        Useful when you need the raw values to derive additional inputs — for
+        example, fetching a DEM to compute slope and aspect before registering
+        them via :meth:`set_input_array`.  Requires :meth:`set_grid` to be
+        called first.
+
+        Parameters
+        ----------
+        source:
+            Any :class:`~geobn.sources.DataSource` to fetch.  The source is
+            not registered as an input.
+
+        Returns
+        -------
+        np.ndarray
+            Float32 array of shape (H, W), aligned to the BN's grid.
+            NaN where the source has no data.
+        """
+        if self._grid is None:
+            raise RuntimeError(
+                "No grid configured.  Call bn.set_grid(crs, resolution, extent) first."
+            )
+        data = source.fetch(grid=self._grid)
+        return align_to_grid(data, self._grid)
+
+    def set_input_array(self, node: str, array: np.ndarray) -> None:
+        """Register a numpy array as the input for a BN evidence node.
+
+        Use this when you have computed an input array yourself (e.g. slope
+        derived from a DEM) and want to wire it directly to a node.  The
+        array must be aligned to the BN's grid — i.e. same shape as the grid
+        configured via :meth:`set_grid`.
+
+        Parameters
+        ----------
+        node:
+            Name of a root node (no parents) in the BN.
+        array:
+            2-D float array of shape (H, W) matching the BN's grid shape.
+        """
+        if self._grid is None:
+            raise RuntimeError(
+                "No grid configured.  Call bn.set_grid(crs, resolution, extent) first."
+            )
+        source = ArraySource(array, crs=self._grid.crs, transform=self._grid.transform)
+        self.set_input(node, source)
 
     # ------------------------------------------------------------------
     # Real-time optimisation
