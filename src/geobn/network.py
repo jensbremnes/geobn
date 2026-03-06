@@ -95,7 +95,7 @@ class GeoBayesianNetwork:
         self,
         node: str,
         breakpoints: list[float],
-        labels: list[str],
+        labels: list[str] | None = None,
     ) -> None:
         """Define how continuous values for *node* are mapped to BN states.
 
@@ -110,8 +110,14 @@ class GeoBayesianNetwork:
             interior values define the bin edges.
         labels:
             State names that **exactly** match the state names in the BN.
+            If omitted, state names are read from the BN node in their
+            definition order — the breakpoints must then produce exactly
+            as many bins as the node has states.
         """
         self._validate_node_exists(node)
+        if labels is None:
+            cpd = self._model.get_cpds(node)
+            labels = list(cpd.state_names[node])
         spec = DiscretizationSpec(breakpoints=list(breakpoints), labels=list(labels))
         self._validate_labels_match_bn(node, spec.labels)
         self._discretizations[node] = spec

@@ -168,10 +168,10 @@ def main() -> None:
     bn.set_input("temperature",  geobn.ConstantSource(AIR_TEMP_C))
 
     # ── 4. Discretizations ────────────────────────────────────────────────
-    bn.set_discretization("slope_angle", [0, 5, 25, 40, 90], ["flat", "gentle", "steep", "extreme"])
-    bn.set_discretization("sun_exposure", [0.0, 0.5, 1.5],   ["favorable", "unfavorable"])
-    bn.set_discretization("recent_snow", [0, 10, 25, 150],  ["light", "moderate", "heavy"])
-    bn.set_discretization("temperature", [-40, -8, -2, 15], ["cold", "moderate", "warming"])
+    bn.set_discretization("slope_angle", [0, 5, 25, 40, 90])
+    bn.set_discretization("sun_exposure", [0.0, 0.5, 1.5])
+    bn.set_discretization("recent_snow", [0, 10, 25, 150])
+    bn.set_discretization("temperature", [-40, -8, -2, 15])
 
     # ── 5. Weather scenario summary ────────────────────────────────────────
     snow_state = (

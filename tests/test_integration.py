@@ -109,6 +109,19 @@ class TestEndToEnd:
         with pytest.raises(ValueError, match="match"):
             bn.set_discretization("slope", [0, 10, 30, 90], ["a", "b", "WRONG"])
 
+    def test_labels_inferred_from_bn(self, bn):
+        """Labels omitted → read from pgmpy CPD state names."""
+        bn.set_discretization("slope", [0, 10, 30, 90])
+        spec = bn._discretizations["slope"]
+        cpd = bn._model.get_cpds("slope")
+        expected = list(cpd.state_names["slope"])
+        assert spec.labels == expected
+
+    def test_wrong_breakpoint_count_raises(self, bn):
+        """Too few breakpoints for the number of BN states raises ValueError."""
+        with pytest.raises(ValueError):
+            bn.set_discretization("slope", [0, 10, 90])  # slope has 3 states → needs 4 breakpoints
+
     def test_xarray_output(self, bn, slope_array, rainfall_array, reference_transform):
         bn.set_input(
             "slope",
