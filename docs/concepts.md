@@ -71,7 +71,7 @@ from inference and all output bands for that pixel are NaN.
 
 This means:
 - Pixels outside WCS coverage → NaN inputs → NaN outputs
-- Sea pixels in a land DEM → NaN depth → NaN risk score
+- Sea pixels in a land DEM → NaN depth → NaN output
 - Invalid sensor readings → NaN evidence → NaN posteriors
 
 ## Inference batching

@@ -15,7 +15,6 @@ from affine import Affine
 folium = pytest.importorskip("folium")
 
 from geobn.result import InferenceResult  # noqa: E402
-from geobn._viz import _risk_score  # noqa: E402
 
 
 @pytest.fixture
@@ -45,11 +44,10 @@ def test_show_map_creates_html(simple_result, tmp_path):
 
 
 def test_show_map_contains_overlays(simple_result, tmp_path):
-    """Layer names for risk score and entropy appear in the generated HTML."""
+    """Layer names for probability bands and entropy appear in the generated HTML."""
     html_path = simple_result.show_map(tmp_path, open_browser=False)
     content = html_path.read_text(encoding="utf-8")
 
-    assert "risk score" in content
     assert "entropy" in content
 
 
@@ -61,22 +59,6 @@ def test_show_map_skips_without_folium(simple_result, tmp_path):
     ):
         with pytest.raises(ImportError, match="folium"):
             simple_result.show_map(tmp_path, open_browser=False)
-
-
-def test_risk_score_computation():
-    """_risk_score() returns correct values for boundary and typical cases."""
-    # 3 states, certain low-risk pixel → score = 0
-    probs_low = np.array([[[1.0, 0.0, 0.0]]], dtype=np.float32)
-    assert _risk_score(probs_low)[0, 0] == pytest.approx(0.0)
-    # Certain high-risk → score = 100
-    probs_high = np.array([[[0.0, 0.0, 1.0]]], dtype=np.float32)
-    assert _risk_score(probs_high)[0, 0] == pytest.approx(100.0)
-    # Uniform → score = 50
-    probs_uni = np.array([[[1 / 3, 1 / 3, 1 / 3]]], dtype=np.float32)
-    assert _risk_score(probs_uni)[0, 0] == pytest.approx(50.0, abs=1e-4)
-    # NaN propagates
-    probs_nan = np.full((1, 1, 3), np.nan, dtype=np.float32)
-    assert np.isnan(_risk_score(probs_nan)[0, 0])
 
 
 def test_extra_layers_included(simple_result, tmp_path):

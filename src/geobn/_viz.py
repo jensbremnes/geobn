@@ -86,25 +86,6 @@ def _cmap_to_hex(cmap_name: str, n: int = 6) -> list[str]:
     ][:n]
 
 
-def _risk_score(probs: np.ndarray) -> np.ndarray:
-    """Normalised expected-value risk score in [0, 100].
-
-    Assigns equidistant weights to ordinal states (state 0 → weight 0,
-    state n-1 → weight 1) and returns their probability-weighted sum × 100.
-    NaN propagates from nodata pixels.
-
-    Parameters
-    ----------
-    probs : (H, W, n_states) float32
-    Returns
-    -------
-    (H, W) float64 in [0, 100], NaN where probs is NaN.
-    """
-    n = probs.shape[-1]
-    weights = np.linspace(0.0, 1.0, n)          # shape (n,)
-    return 100.0 * np.sum(weights * probs, axis=-1)
-
-
 def show_map(
     result: "InferenceResult",
     output_dir: str | Path = ".",
@@ -115,7 +96,6 @@ def show_map(
     show_probability_bands: bool = True,
     show_category: bool = True,
     show_entropy: bool = True,
-    score_threshold: float = 0.0,
 ) -> Path:
     """Generate and optionally open an interactive Leaflet map.
 
@@ -143,7 +123,6 @@ def show_map(
     """
     try:
         import folium
-        import branca.colormap as branca_cm
     except ImportError as exc:
         raise ImportError(
             "folium is required for show_map(). "
@@ -200,23 +179,6 @@ def show_map(
     for node, probs in result.probabilities.items():
         n_states = probs.shape[-1]
         states = result.state_names[node]
-
-        # ── Risk score (default shown) ──────────────────────────────────
-        score = _risk_score(probs)                   # (H, W) in [0, 100]
-        if score_threshold > 0.0:
-            score = score.copy()
-            score[score < score_threshold * 100] = np.nan
-        score_url = _array_to_png_url(score, "RdYlGn_r", 0.0, 100.0, overlay_opacity)
-        fg = folium.FeatureGroup(name=f"{node} — risk score", show=True)
-        folium.raster_layers.ImageOverlay(image=score_url, bounds=bounds, opacity=1.0).add_to(fg)
-        fg.add_to(m)
-
-        cb = branca_cm.LinearColormap(
-            colors=_cmap_to_hex("RdYlGn_r", 7),
-            vmin=0.0, vmax=100.0,
-            caption=f"{node} — risk score (0 = low, 100 = high)",
-        )
-        cb.add_to(m)
 
         # ── Individual probability bands (all hidden) ───────────────────
         if show_probability_bands:
