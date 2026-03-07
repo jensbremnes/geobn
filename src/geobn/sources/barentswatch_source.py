@@ -42,6 +42,8 @@ class BarentswatchAISSource(DataSource):
         HTTP request timeout in seconds.
     """
 
+    requires_grid = True
+
     def __init__(
         self,
         client_id: str,

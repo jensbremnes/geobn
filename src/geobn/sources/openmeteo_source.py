@@ -43,6 +43,8 @@ class OpenMeteoSource(DataSource):
         HTTP request timeout in seconds.
     """
 
+    requires_grid = True
+
     def __init__(
         self,
         variable: str,

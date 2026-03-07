@@ -45,6 +45,8 @@ class KartverketDTMSource(DataSource):
         On a cache hit the HTTP request is skipped entirely.
     """
 
+    requires_grid = True
+
     def __init__(
         self,
         layer: str = "dtm10",

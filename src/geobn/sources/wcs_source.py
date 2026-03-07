@@ -43,6 +43,8 @@ class WCSSource(DataSource):
         Ignored for WCS 1.x requests.
     """
 
+    requires_grid = True
+
     def __init__(
         self,
         url: str,

@@ -142,6 +142,57 @@ class TestEndToEnd:
         assert ds["fire_risk"].dims == ("state", "y", "x")
 
 
+class TestAutoGridResolution:
+    """Auto-grid selects the finest-resolution self-contained source."""
+
+    def test_finest_source_wins(self, bn, fire_risk_model):
+        """Register coarse source first, then fine source; grid must match the fine one."""
+        from affine import Affine
+
+        coarse_transform = Affine(0.5, 0, 0.0, 0, -0.5, 50.0)  # 0.5° pixels
+        fine_transform = Affine(0.1, 0, 0.0, 0, -0.1, 50.0)    # 0.1° pixels (finer)
+        coarse = np.ones((2, 2), dtype=np.float32) * 5.0
+        fine = np.ones((10, 10), dtype=np.float32) * 5.0
+
+        # Register coarse first — old code would pick this; new code should pick fine
+        bn.set_input("slope",    geobn.ArraySource(coarse, crs="EPSG:4326", transform=coarse_transform))
+        bn.set_input("rainfall", geobn.ArraySource(fine,   crs="EPSG:4326", transform=fine_transform))
+        bn.set_discretization("slope",    [0, 10, 30, 90], ["flat", "moderate", "steep"])
+        bn.set_discretization("rainfall", [0, 25, 75, 200], ["low", "medium", "high"])
+
+        result = bn.infer(query=["fire_risk"])
+        # Output grid shape should match the fine source (10×10), not the coarse (2×2)
+        assert result.probabilities["fire_risk"].shape[:2] == (10, 10)
+
+    def test_only_grid_aware_sources_raises(self, bn, fire_risk_model):
+        """If every source requires_grid, auto-detection must raise a clear ValueError."""
+        from unittest.mock import MagicMock
+        from geobn.sources._base import DataSource
+
+        class FakeGridAwareSource(DataSource):
+            requires_grid = True
+            def fetch(self, grid=None):
+                raise RuntimeError("should not be called")  # pragma: no cover
+
+        bn.set_input("slope",    FakeGridAwareSource())
+        bn.set_input("rainfall", FakeGridAwareSource())
+        bn.set_discretization("slope",    [0, 10, 30, 90], ["flat", "moderate", "steep"])
+        bn.set_discretization("rainfall", [0, 25, 75, 200], ["low", "medium", "high"])
+
+        with pytest.raises(ValueError, match="set_grid"):
+            bn.infer(query=["fire_risk"])
+
+    def test_constant_only_source_raises(self, bn):
+        """All-ConstantSource inputs have no CRS → must raise suggesting set_grid."""
+        bn.set_input("slope",    geobn.ConstantSource(15.0))
+        bn.set_input("rainfall", geobn.ConstantSource(50.0))
+        bn.set_discretization("slope",    [0, 10, 30, 90], ["flat", "moderate", "steep"])
+        bn.set_discretization("rainfall", [0, 25, 75, 200], ["low", "medium", "high"])
+
+        with pytest.raises(ValueError, match="set_grid"):
+            bn.infer(query=["fire_risk"])
+
+
 class TestFetchRawAndSetInputArray:
     def test_fetch_raw_requires_grid(self, bn):
         with pytest.raises(RuntimeError, match="set_grid"):

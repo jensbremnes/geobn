@@ -39,6 +39,8 @@ class CopernicusMarineSource(DataSource):
         CMEMS password (falls back to env var).
     """
 
+    requires_grid = True
+
     def __init__(
         self,
         dataset_id: str,

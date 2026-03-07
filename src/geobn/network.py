@@ -358,17 +358,35 @@ class GeoBayesianNetwork:
             ref_grid = self._cached_ref_grid
             pre_fetched = {}
         else:
-            first_node = next(iter(self._inputs))
-            first_data = self._inputs[first_node].fetch(grid=None)
-            if first_data.crs is None:
+            # Fetch every self-contained (non-grid-aware) source up front so we
+            # can inspect its CRS and resolution.  Grid-aware sources cannot be
+            # fetched yet — they need the bbox, which we don't know yet.
+            pre_fetched = {}
+            candidate_grids: list[tuple[float, GridSpec, str]] = []  # (pixel_size, grid, node)
+
+            for node, source in self._inputs.items():
+                if source.requires_grid:
+                    continue  # needs bbox first — skip for now
+                data = source.fetch(grid=None)
+                pre_fetched[node] = data
+                if data.crs is None:
+                    continue  # ConstantSource or similar — no spatial info
+                grid_candidate = GridSpec.from_raster_data(data)
+                pixel_size = abs(grid_candidate.transform.a)
+                candidate_grids.append((pixel_size, grid_candidate, node))
+
+            if not candidate_grids:
                 raise ValueError(
-                    f"The first registered input '{first_node}' has no CRS "
-                    f"(it is a ConstantSource or similar).  "
-                    f"Call bn.set_grid(crs, resolution, extent) explicitly "
-                    f"or register a georeferenced source first."
+                    "Could not determine a reference grid automatically.  "
+                    "All registered sources require a grid bbox before they "
+                    "can fetch data (requires_grid=True).  "
+                    "Call bn.set_grid(crs, resolution, extent) explicitly."
                 )
-            ref_grid = GridSpec.from_raster_data(first_data)
-            pre_fetched = {first_node: first_data}
+
+            # Pick the source with the finest (smallest) pixel size so that
+            # high-resolution sources are never downsampled unnecessarily.
+            _smallest_pixel, ref_grid, ref_node = min(candidate_grids, key=lambda t: t[0])
+            _log.info("Auto-selected reference grid from '%s' (finest resolution)", ref_node)
 
         _log.info(
             "Reference grid: %s, shape=%d×%d, resolution=%g",

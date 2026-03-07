@@ -64,6 +64,7 @@ class EMODnetBathymetrySource(DataSource):
         On a cache hit the HTTP request is skipped entirely.
     """
 
+    requires_grid = True
     _VALID_LAYERS = frozenset({"emodnet:mean", "emodnet:stdev"})
 
     def __init__(
@@ -123,6 +124,7 @@ class EMODnetShippingDensitySource(DataSource):
         On a cache hit the HTTP request is skipped entirely.
     """
 
+    requires_grid = True
     _VALID_SHIP_TYPES = frozenset(_SHIPPING_LAYER_MAP)
     _VALID_YEARS = range(2017, 2026)
 

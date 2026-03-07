@@ -34,6 +34,8 @@ class HubOceanSource(DataSource):
         HubOcean API key (falls back to ``HUBOCEAN_API_KEY`` env var).
     """
 
+    requires_grid = True
+
     def __init__(
         self,
         dataset_id: str,

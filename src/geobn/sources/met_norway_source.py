@@ -60,6 +60,7 @@ class METOceanForecastSource(DataSource):
         HTTP request timeout in seconds.
     """
 
+    requires_grid = True
     _API = "https://api.met.no/weatherapi/oceanforecast/2.0/complete"
 
     def __init__(
@@ -163,6 +164,7 @@ class METLocationForecastSource(DataSource):
         HTTP request timeout in seconds.
     """
 
+    requires_grid = True
     _API = "https://api.met.no/weatherapi/locationforecast/2.0/compact"
 
     def __init__(

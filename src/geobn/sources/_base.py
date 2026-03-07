@@ -16,6 +16,11 @@ class DataSource(ABC):
     — no rasterio objects are ever exposed outside the source module.
     """
 
+    # Subclasses that require a grid bbox before they can fetch (e.g. WCS,
+    # Open-Meteo) override this to True.  Self-contained sources (Raster,
+    # Array, URL, Constant) keep the default False.
+    requires_grid: bool = False
+
     @abstractmethod
     def fetch(self, grid: GridSpec | None = None) -> RasterData:
         """Fetch data aligned to *grid* if provided.
