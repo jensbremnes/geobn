@@ -34,6 +34,17 @@ _LOCATION_VARIABLES: frozenset[str] = frozenset(
 _PRECIPITATION_VARIABLE = "precipitation_amount"
 
 
+def _find_closest_timeseries_entry(timeseries: list[dict], target_timestamp: float) -> dict:
+    """Return the timeseries entry whose time is closest to *target_timestamp* (Unix seconds)."""
+    return min(
+        timeseries,
+        key=lambda e: abs(
+            datetime.fromisoformat(e["time"].replace("Z", "+00:00")).timestamp()
+            - target_timestamp
+        ),
+    )
+
+
 class METOceanForecastSource(_PointSamplingSource):
     """Fetch ocean forecast data from the MET Norway OceanForecast 2.0 API.
 
@@ -89,13 +100,7 @@ class METOceanForecastSource(_PointSamplingSource):
             return float("nan")
 
         target_dt = datetime.now(tz=timezone.utc).timestamp() + self._offset_hours * 3600
-        best_entry = min(
-            timeseries,
-            key=lambda e: abs(
-                datetime.fromisoformat(e["time"].replace("Z", "+00:00")).timestamp()
-                - target_dt
-            ),
-        )
+        best_entry = _find_closest_timeseries_entry(timeseries, target_dt)
 
         details = (
             best_entry.get("data", {})
@@ -155,13 +160,7 @@ class METLocationForecastSource(_PointSamplingSource):
             return float("nan")
 
         target_dt = datetime.now(tz=timezone.utc).timestamp() + self._offset_hours * 3600
-        best_entry = min(
-            timeseries,
-            key=lambda e: abs(
-                datetime.fromisoformat(e["time"].replace("Z", "+00:00")).timestamp()
-                - target_dt
-            ),
-        )
+        best_entry = _find_closest_timeseries_entry(timeseries, target_dt)
 
         entry_data = best_entry.get("data", {})
 
