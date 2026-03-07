@@ -35,10 +35,11 @@ bn.set_input("slope_angle", geobn.KartverketDTMSource())
 bn.set_input("recent_snow", geobn.ConstantSource(30.0))
 ```
 
-The first call to `set_input` with a georeferenced source establishes the **reference
-grid** (CRS, resolution, extent). All other sources are reprojected to this grid
-automatically. To override this behaviour, call `bn.set_grid(crs, resolution, extent)`
-explicitly before running inference.
+At inference time, geobn inspects all registered georeferenced sources and selects the
+one with the **finest resolution** (smallest pixel size) as the **reference grid** (CRS,
+resolution, extent). All other sources are reprojected to this grid automatically. To
+override this behaviour, call `bn.set_grid(crs, resolution, extent)` explicitly before
+running inference.
 
 ## GridSpec and alignment
 

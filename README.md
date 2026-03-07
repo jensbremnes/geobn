@@ -44,7 +44,7 @@ DataSources  →  align to grid  →  discretize  →  BN inference  →  Infere
 ```
 
 1. **Load a BN** — `geobn.load("model.bif")` reads a standard `.bif` file via pgmpy.
-2. **Attach sources** — each evidence node gets a `DataSource`. All sources are reprojected and resampled to a common grid at inference time (first georeferenced source sets the grid, or call `bn.set_grid()` explicitly).
+2. **Attach sources** — each evidence node gets a `DataSource`. All sources are reprojected and resampled to a common grid at inference time (the finest-resolution georeferenced source sets the grid automatically, or call `bn.set_grid()` explicitly).
 3. **Discretize** — `set_discretization(node, breakpoints, labels)` bins continuous raster values into the discrete states your BN expects.
 4. **Infer** — unique evidence combinations are batched; pgmpy `VariableElimination` runs once per unique combo, not once per pixel.
 5. **Pre-compute (optional)** — call `bn.precompute(query)` once before inference to exhaustively run `VariableElimination` across every possible combination of evidence states and store the results in a lookup table. Subsequent `bn.infer()` calls then reduce to a single array-index operation per pixel — no pgmpy at runtime at all. This is particularly valuable in real-time or interactive applications where the same BN is queried repeatedly with changing spatial data (e.g. updated weather inputs), because the combinatorial explosion is bounded by the number of discrete states, not by the number of pixels or API calls.
