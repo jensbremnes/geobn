@@ -36,7 +36,7 @@ Outputs (examples/lyngen_alps/output/)
 ---------------------------------------
     map.html            — interactive Leaflet map (pan/zoom, layer switcher)
                           (requires folium: pip install geobn[viz])
-    avalanche_risk.tif  — 4-band GeoTIFF: P(low), P(medium), P(high), entropy
+    avalanche_risk.tif  — 3-band GeoTIFF: P(low), P(high), entropy
                           (requires rasterio: pip install geobn[io])
 
 Run
@@ -195,7 +195,7 @@ def main() -> None:
     except Exception as exc:
         sys.exit(f"ERROR during inference: {exc}")
 
-    probs = result.probabilities["avalanche_risk"]   # (H, W, 3)
+    probs = result.probabilities["avalanche_risk"]   # (H, W, 2)
     ent   = result.entropy("avalanche_risk")          # (H, W)
 
     # ── 7. Console statistics ──────────────────────────────────────────────
@@ -208,7 +208,7 @@ def main() -> None:
         p = float(np.nanmean(probs[..., i]))
         print(f"  P({state:6s}) mean {p:.2f}  {bar(p)}")
 
-    p_high = probs[..., 2]
+    p_high = probs[..., 1]
     steep_n  = (slope_deg > 35) & (north_facing == 1.0)
     gentle_s = (slope_deg < 25) & (north_facing == 0.0)
     p_high_steep_n  = float(np.nanmean(p_high[steep_n]))  if steep_n.any()  else float("nan")
@@ -222,9 +222,10 @@ def main() -> None:
     try:
         html_path = result.show_map(
             OUT_DIR,
-            extra_layers={"Slope angle (°)": slope_deg},
-            show_probability_bands=False,
-            show_category=False,
+            extra_layers={
+                "Slope angle (°)": slope_deg,
+                "Aspect (N-facing)": north_facing,
+            },
         )
         print(f"\nInteractive map opened in browser → {html_path}")
         print("  Use the layer control (top-right) to switch overlays.")
@@ -237,7 +238,7 @@ def main() -> None:
         result.to_geotiff(OUT_DIR)
         tif_path = OUT_DIR / "avalanche_risk.tif"
         print(f"GeoTIFF written → {tif_path}")
-        print("  Band 1: P(low)   Band 2: P(medium)   Band 3: P(high)   Band 4: entropy")
+        print("  Band 1: P(low)   Band 2: P(high)   Band 3: entropy")
     except ImportError as exc:
         print(f"\nSkipping GeoTIFF export ({exc})")
         print("  Install rasterio: pip install geobn[io]")
