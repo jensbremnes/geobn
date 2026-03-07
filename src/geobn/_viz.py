@@ -16,6 +16,15 @@ import numpy as np
 if TYPE_CHECKING:
     from .result import InferenceResult
 
+# Discrete category colours — shared by _discrete_array_to_png_url and colorbar builder.
+_DISCRETE_PALETTE_HEX = ["#2ecc71", "#e6801f", "#e84c3d", "#8f479a", "#3396dc"]
+
+
+def _hex_to_rgb_float(hex_color: str) -> tuple[float, float, float]:
+    """Convert a hex color string like ``#rrggbb`` to float (r, g, b) in [0, 1]."""
+    h = hex_color.lstrip("#")
+    return int(h[0:2], 16) / 255, int(h[2:4], 16) / 255, int(h[4:6], 16) / 255
+
 
 def _array_to_png_url(
     arr: np.ndarray,
@@ -54,17 +63,9 @@ def _discrete_array_to_png_url(
     """Return a base64 PNG for a discrete category array (integer 0…n_states-1)."""
     import matplotlib.pyplot as plt
 
-    _PALETTE = [
-        (0.18, 0.80, 0.44),  # green  — low / state 0
-        (0.90, 0.50, 0.13),  # orange — medium / state 1
-        (0.91, 0.30, 0.24),  # red    — high / state 2
-        (0.56, 0.28, 0.54),  # purple — state 3
-        (0.20, 0.60, 0.86),  # blue   — state 4
-    ]
-
     rgba = np.zeros((*category.shape, 4), dtype=np.float64)
-    for i in range(min(n_states, len(_PALETTE))):
-        r, g, b = _PALETTE[i]
+    for i in range(min(n_states, len(_DISCRETE_PALETTE_HEX))):
+        r, g, b = _hex_to_rgb_float(_DISCRETE_PALETTE_HEX[i])
         rgba[category == i] = (r, g, b, alpha)
     # NaN pixels stay at alpha=0 (zeros initialisation)
 
@@ -176,6 +177,10 @@ def show_map(
     folium.TileLayer("OpenStreetMap", name="OpenStreetMap", show=False).add_to(m)
 
     # ── Inference result layers ────────────────────────────────────────────
+    import json
+
+    layer_colorbars: dict[str, dict] = {}
+
     for node, probs in result.probabilities.items():
         n_states = probs.shape[-1]
         states = result.state_names[node]
@@ -185,10 +190,18 @@ def show_map(
             state_cmaps = {0: "YlGn", n_states - 1: "YlOrRd"}   # first=green, last=red
             for i, state in enumerate(states):
                 cmap_name = state_cmaps.get(i, "YlOrBr")
+                layer_name = f"P({state})"
                 img_url = _array_to_png_url(probs[..., i], cmap_name, 0.0, 1.0, overlay_opacity)
-                fg = folium.FeatureGroup(name=f"P({state})", show=False)
+                fg = folium.FeatureGroup(name=layer_name, show=False)
                 folium.raster_layers.ImageOverlay(image=img_url, bounds=bounds, opacity=1.0).add_to(fg)
                 fg.add_to(m)
+                layer_colorbars[layer_name] = {
+                    "title": layer_name,
+                    "type": "continuous",
+                    "colors": _cmap_to_hex(cmap_name, 8),
+                    "vmin": "0",
+                    "vmax": "1",
+                }
 
         # ── Argmax risk category (hidden) ───────────────────────────────
         if show_category:
@@ -196,18 +209,33 @@ def show_map(
             category = np.full(probs.shape[:2], np.nan)
             category[valid_mask] = np.argmax(probs[valid_mask], axis=-1).astype(float)
             cat_url = _discrete_array_to_png_url(category, n_states, overlay_opacity)
-            fg = folium.FeatureGroup(name=f"{node} — category", show=False)
+            layer_name = f"{node} — category"
+            fg = folium.FeatureGroup(name=layer_name, show=False)
             folium.raster_layers.ImageOverlay(image=cat_url, bounds=bounds, opacity=1.0).add_to(fg)
             fg.add_to(m)
+            layer_colorbars[layer_name] = {
+                "title": layer_name,
+                "type": "discrete",
+                "colors": _DISCRETE_PALETTE_HEX[:n_states],
+                "labels": list(states),
+            }
 
         # ── Shannon entropy (hidden) ─────────────────────────────────────
         if show_entropy:
             ent = result.entropy(node)
             ent_max = math.log2(n_states) if n_states > 1 else 1.0
             ent_url = _array_to_png_url(ent, "plasma", 0.0, ent_max, overlay_opacity)
-            fg = folium.FeatureGroup(name=f"{node} — entropy", show=False)
+            layer_name = f"{node} — entropy"
+            fg = folium.FeatureGroup(name=layer_name, show=False)
             folium.raster_layers.ImageOverlay(image=ent_url, bounds=bounds, opacity=1.0).add_to(fg)
             fg.add_to(m)
+            layer_colorbars[layer_name] = {
+                "title": layer_name,
+                "type": "continuous",
+                "colors": _cmap_to_hex("plasma", 8),
+                "vmin": "0",
+                "vmax": f"{ent_max:.3g} bits",
+            }
 
     # ── Extra layers ───────────────────────────────────────────────────────
     if extra_layers:
@@ -218,30 +246,81 @@ def show_map(
             fg = folium.FeatureGroup(name=layer_name, show=False)
             folium.raster_layers.ImageOverlay(image=img_url, bounds=bounds, opacity=1.0).add_to(fg)
             fg.add_to(m)
+            layer_colorbars[layer_name] = {
+                "title": layer_name,
+                "type": "continuous",
+                "colors": _cmap_to_hex("viridis", 8),
+                "vmin": f"{vmin:.4g}",
+                "vmax": f"{vmax:.4g}",
+            }
 
     folium.LayerControl(collapsed=False).add_to(m)
 
-    # ── Convert overlay checkboxes to radio buttons ─────────────────────────
-    # Leaflet fires a `change` event for both the newly selected and the
-    # previously selected input, so mutual exclusivity works automatically.
+    # ── Radio buttons + colorbar UI ─────────────────────────────────────────
+    # A single MacroElement handles both concerns:
+    #   1. Convert overlay checkboxes → radio buttons (mutual exclusivity).
+    #   2. Show a colorbar panel bottom-left for whichever overlay is selected.
     from folium import MacroElement
     from jinja2 import Template
 
-    radio_script = MacroElement()
-    radio_script._template = Template("""
-{% macro script(this, kwargs) %}
-document.addEventListener('DOMContentLoaded', function () {
+    colorbars_json = json.dumps(layer_colorbars)
+    script_body = f"""
+document.addEventListener('DOMContentLoaded', function () {{
+    var layerColorbars = {colorbars_json};
+
+    var mapDiv = document.querySelector('.folium-map');
+    var cbDiv = document.createElement('div');
+    cbDiv.id = 'geobn-colorbar';
+    cbDiv.style.cssText = 'position:absolute;bottom:30px;left:10px;z-index:1000;'
+        + 'background:rgba(255,255,255,0.85);padding:8px 12px;border-radius:6px;'
+        + 'font-family:sans-serif;font-size:12px;min-width:160px;display:none;pointer-events:none;';
+    mapDiv.appendChild(cbDiv);
+
+    function updateColorbar(name) {{
+        var spec = layerColorbars[name];
+        if (!spec) {{ cbDiv.style.display = 'none'; return; }}
+        var html = '<div style="font-weight:bold;margin-bottom:5px;">' + spec.title + '</div>';
+        if (spec.type === 'continuous') {{
+            html += '<div style="background:linear-gradient(to right,' + spec.colors.join(',')
+                + ');height:14px;width:180px;border-radius:3px;"></div>';
+            html += '<div style="display:flex;justify-content:space-between;width:180px;margin-top:3px;">'
+                + '<span>' + spec.vmin + '</span><span>' + spec.vmax + '</span></div>';
+        }} else {{
+            html += '<div>';
+            for (var i = 0; i < spec.colors.length; i++) {{
+                html += '<div style="display:flex;align-items:center;gap:5px;margin-bottom:3px;">'
+                    + '<div style="width:14px;height:14px;background:' + spec.colors[i]
+                    + ';border-radius:2px;flex-shrink:0;"></div>'
+                    + '<span>' + spec.labels[i] + '</span></div>';
+            }}
+            html += '</div>';
+        }}
+        cbDiv.innerHTML = html;
+        cbDiv.style.display = 'block';
+    }}
+
     var overlays = document.querySelectorAll(
-        '.leaflet-control-layers-overlays input[type="checkbox"]'
-    );
-    overlays.forEach(function (cb) {
+        '.leaflet-control-layers-overlays input[type="checkbox"]');
+    overlays.forEach(function (cb) {{
         cb.type = 'radio';
         cb.name = 'geobn-overlay';
-    });
-});
-{% endmacro %}
-""")
-    radio_script.add_to(m)
+        var label = cb.closest('label') || cb.parentElement;
+        var span = label ? label.querySelector('span') : null;
+        cb.dataset.layerName = span ? span.textContent.trim() : '';
+    }});
+
+    document.addEventListener('change', function (e) {{
+        if (e.target.name === 'geobn-overlay') {{
+            updateColorbar(e.target.dataset.layerName);
+        }}
+    }});
+}});
+"""
+    ui_script = MacroElement()
+    ui_script._template = Template(
+        "{% macro script(this, kwargs) %}\n" + script_body + "\n{% endmacro %}"
+    )
+    ui_script.add_to(m)
 
     # ── Write HTML ─────────────────────────────────────────────────────────
     output_dir = Path(output_dir)
