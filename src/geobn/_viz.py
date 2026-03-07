@@ -221,6 +221,28 @@ def show_map(
 
     folium.LayerControl(collapsed=False).add_to(m)
 
+    # ── Convert overlay checkboxes to radio buttons ─────────────────────────
+    # Leaflet fires a `change` event for both the newly selected and the
+    # previously selected input, so mutual exclusivity works automatically.
+    from folium import MacroElement
+    from jinja2 import Template
+
+    radio_script = MacroElement()
+    radio_script._template = Template("""
+{% macro script(this, kwargs) %}
+document.addEventListener('DOMContentLoaded', function () {
+    var overlays = document.querySelectorAll(
+        '.leaflet-control-layers-overlays input[type="checkbox"]'
+    );
+    overlays.forEach(function (cb) {
+        cb.type = 'radio';
+        cb.name = 'geobn-overlay';
+    });
+});
+{% endmacro %}
+""")
+    radio_script.add_to(m)
+
     # ── Write HTML ─────────────────────────────────────────────────────────
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
