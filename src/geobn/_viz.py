@@ -299,20 +299,28 @@ document.addEventListener('DOMContentLoaded', function () {{
         cbDiv.style.display = 'block';
     }}
 
-    var overlays = document.querySelectorAll(
-        '.leaflet-control-layers-overlays input[type="checkbox"]');
-    overlays.forEach(function (cb) {{
-        cb.type = 'radio';
-        cb.name = 'geobn-overlay';
+    var overlayInputs = Array.from(document.querySelectorAll(
+        '.leaflet-control-layers-overlays input[type="checkbox"]'));
+    overlayInputs.forEach(function (cb) {{
         var label = cb.closest('label') || cb.parentElement;
         var span = label ? label.querySelector('span') : null;
         cb.dataset.layerName = span ? span.textContent.trim() : '';
-    }});
 
-    document.addEventListener('change', function (e) {{
-        if (e.target.name === 'geobn-overlay') {{
-            updateColorbar(e.target.dataset.layerName);
-        }}
+        cb.addEventListener('change', function () {{
+            if (cb.checked) {{
+                // Uncheck all other overlays so at most one is active at a time
+                overlayInputs.forEach(function (other) {{
+                    if (other !== cb && other.checked) {{
+                        other.checked = false;
+                        other.dispatchEvent(new Event('change'));
+                    }}
+                }});
+                updateColorbar(cb.dataset.layerName);
+            }} else {{
+                // Active layer clicked again — deselect and hide colorbar
+                cbDiv.style.display = 'none';
+            }}
+        }});
     }});
 }});
 """
