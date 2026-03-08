@@ -123,12 +123,12 @@ bn.set_input("temperature", geobn.ConstantSource(-5.0))   # °C
 Breakpoints map continuous raster values into the discrete states your BN expects. The number of intervals must match the number of states for that node.
 
 ```python
-bn.set_discretization("slope_angle",  [0, 5, 25, 40, 90])      # flat / gentle / steep / extreme
+bn.set_discretization("slope_angle",  [0, 5, 25, 40, 90])      # flat/gentle/steep/extreme
 bn.set_discretization("sun_exposure", [-0.5, 0.5, 1.5, 2.5, 3.5])
-bn.set_discretization("forest_cover", [-0.5, 0.5, 1.5, 2.5])   # sparse / moderate / dense
-bn.set_discretization("wind_load",    [0, 5, 15, 50])           # low / moderate / high (m/s)
-bn.set_discretization("recent_snow",  [0, 10, 25, 150])         # light / moderate / heavy (cm)
-bn.set_discretization("temperature",  [-40, -8, -2, 15])        # cold / moderate / warming (°C)
+bn.set_discretization("forest_cover", [-0.5, 0.5, 1.5, 2.5])   # sparse/moderate/dense
+bn.set_discretization("wind_load",    [0, 5, 15, 50])           # low/moderate/high (m/s)
+bn.set_discretization("recent_snow",  [0, 10, 25, 150])         # light/moderate/heavy (cm)
+bn.set_discretization("temperature",  [-40, -8, -2, 15])        # cold/moderate/warming (°C)
 ```
 
 ### Running inference
@@ -151,9 +151,9 @@ for i, state in enumerate(result.state_names["avalanche_risk"]):
 ### Exporting results
 
 ```python
-result.to_xarray()          # xarray Dataset — integrates with existing geospatial workflows
+result.to_xarray()          # xarray Dataset
 result.to_geotiff("out/")   # multi-band GeoTIFF: N probability bands + entropy
-result.show_map("out/")     # interactive Leaflet map in the browser
+result.show_map("out/")     # interactive Leaflet map
 ```
 
 ### Repeated inference with changing inputs
