@@ -88,6 +88,11 @@ class GeoBayesianNetwork:
         self._validate_node_exists(node)
         self._validate_is_root(node)
         self._inputs[node] = source
+        # If this node was frozen and cached, the cached array is now stale
+        if self._frozen_cache.pop(node, None) is not None:
+            self._inference_table.clear()
+            self._table_node_order = []
+            self._table_query_nodes = []
         _log.info("Input: '%s' ← %s", node, type(source).__name__)
 
     def set_discretization(
@@ -120,6 +125,11 @@ class GeoBayesianNetwork:
         spec = DiscretizationSpec(breakpoints=list(breakpoints), labels=list(labels))
         self._validate_labels_match_bn(node, spec.labels)
         self._discretizations[node] = spec
+        # If this node was frozen and cached, the cached array used the old spec
+        if self._frozen_cache.pop(node, None) is not None:
+            self._inference_table.clear()
+            self._table_node_order = []
+            self._table_query_nodes = []
         _log.info("Discretization: '%s' → %d bins %s", node, len(labels), labels)
 
     def set_grid(
