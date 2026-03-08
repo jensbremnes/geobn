@@ -20,6 +20,10 @@ class TestDiscretizationSpec:
         with pytest.raises(ValueError, match="breakpoints"):
             DiscretizationSpec([0], ["flat"])
 
+    def test_non_monotonic_breakpoints_raises(self):
+        with pytest.raises(ValueError, match="strictly increasing"):
+            DiscretizationSpec([0, 30, 10, 90], ["flat", "moderate", "steep"])
+
 
 class TestDiscretizeArray:
     def setup_method(self):

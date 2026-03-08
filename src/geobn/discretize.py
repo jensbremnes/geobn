@@ -34,6 +34,8 @@ class DiscretizationSpec:
             )
         if len(self.breakpoints) < 2:
             raise ValueError("At least 2 breakpoints are required.")
+        if any(b >= c for b, c in zip(self.breakpoints, self.breakpoints[1:])):
+            raise ValueError("Breakpoints must be strictly increasing.")
 
 
 def discretize_array(array: np.ndarray, spec: DiscretizationSpec) -> np.ndarray:
