@@ -37,6 +37,19 @@ uv pip install -e ".[dev]"
 
 ---
 
+## Data sources
+
+| Class | Use case |
+|---|---|
+| `ArraySource(array, crs, transform)` | In-memory numpy array |
+| `ConstantSource(value)` | Broadcast a scalar over the entire grid |
+| `RasterSource(path)` | Local GeoTIFF / any rasterio-readable file |
+| `URLSource(url)` | Remote Cloud-Optimised GeoTIFF |
+| `WCSSource(url, layer, valid_range=...)` | Generic OGC WCS endpoint (terrain, bathymetry, …) |
+| `PointGridSource(fn)` | Sample any `fn(lat, lon) -> float` over the bounding box with user-defined resolution |
+
+---
+
 ## How it works
 
 ```
@@ -164,19 +177,6 @@ For maximum throughput, pre-run all evidence combinations once and reduce subseq
 bn.precompute(query=["avalanche_risk"])  # one-time cost: runs all state combinations
 result = bn.infer(query=["avalanche_risk"])  # O(H×W) array indexing — no pgmpy at runtime
 ```
-
----
-
-## Data sources
-
-| Class | Use case |
-|---|---|
-| `ArraySource(array, crs, transform)` | In-memory numpy array |
-| `ConstantSource(value)` | Broadcast a scalar over the entire grid |
-| `RasterSource(path)` | Local GeoTIFF / any rasterio-readable file |
-| `URLSource(url)` | Remote Cloud-Optimised GeoTIFF |
-| `WCSSource(url, layer, valid_range=...)` | Generic OGC WCS endpoint (terrain, bathymetry, …) |
-| `PointGridSource(fn)` | Sample any `fn(lat, lon) -> float` over the bounding box |
 
 ---
 
