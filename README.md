@@ -192,7 +192,7 @@ for wind_ms in [3, 8, 20]:
     result.to_geotiff(f"out/wind_{wind_ms}ms/")
 ```
 
-For maximum throughput, pre-run all evidence combinations once and reduce subsequent calls to a numpy index lookup:
+For maximum throughput, pre-run all evidence combinations once and reduce subsequent calls to a numpy index lookup. `bn.precompute()` exhausts every combination of discrete evidence states, stores the results in an in-memory lookup table, and subsequent `bn.infer()` calls resolve each pixel by indexing into that table — no pgmpy inference at runtime.
 
 ```python
 bn.precompute(query=["avalanche_risk"])  # one-time cost: runs all state combinations
