@@ -18,7 +18,7 @@ using a free WCS endpoint. No credentials are required.
 ```
 slope_angle ──┐
                ├──► terrain_factor ──┐
-aspect ────────┘                     ├──► avalanche_risk
+sun_exposure ──┘                     ├──► avalanche_risk
 recent_snow ──┐                      │
                ├──► weather_factor ──┘
 temperature ──┘
@@ -31,8 +31,8 @@ Four root nodes (evidence inputs), two intermediate nodes, one query node
 
 | Node | Source | Notes |
 |------|--------|-------|
-| `slope_angle` | `KartverketDTMSource` → numpy.gradient | degrees (0–90°) |
-| `aspect` | `KartverketDTMSource` → numpy.gradient | binary N-facing (0/1) |
+| `slope_angle` | `WCSSource` (Kartverket DTM) → numpy.gradient | degrees (0–90°) |
+| `sun_exposure` | `WCSSource` (Kartverket DTM) → numpy.gradient | aspect quadrant (0=N, 1=E, 2=W, 3=S) |
 | `recent_snow` | `ConstantSource` | cm; edit `RECENT_SNOW_CM` to change scenario |
 | `temperature` | `ConstantSource` | °C; edit `AIR_TEMP_C` to change scenario |
 
@@ -54,8 +54,13 @@ ref_grid = GridSpec(crs=CRS, transform=transform, shape=(H, W))
 ### 2. Fetch the DTM
 
 ```python
-dtm_data = geobn.KartverketDTMSource(cache_dir=CACHE_DIR).fetch(grid=ref_grid)
-dem = dtm_data.array  # (80, 240) float32, NaN at sea
+dem = bn.fetch_raw(geobn.WCSSource(
+    url="https://hoydedata.no/arcgis/services/las_dtm_somlos/ImageServer/WCSServer",
+    layer="las_dtm",
+    version="1.0.0",
+    valid_range=(-500.0, 9000.0),
+    cache_dir=CACHE_DIR,
+))  # (80, 240) float32, NaN at sea
 ```
 
 The terrain is cached after the first run. On subsequent runs it loads from
@@ -83,19 +88,19 @@ dz_drow, dz_dcol = np.gradient(dem_filled, pixel_lat_m, pixel_lon_m)
 bn = geobn.load("avalanche_risk.bif")
 bn.set_grid(CRS, RESOLUTION, (WEST, SOUTH, EAST, NORTH))
 
-bn.set_input("slope_angle", geobn.ArraySource(slope_deg, crs=CRS, transform=...))
-bn.set_input("aspect",      geobn.ArraySource(north_facing, crs=CRS, transform=...))
+bn.set_input_array("slope_angle",  slope_deg)
+bn.set_input_array("sun_exposure", sun_exposure)
 bn.set_input("recent_snow", geobn.ConstantSource(RECENT_SNOW_CM))
-bn.set_input("temperature", geobn.ConstantSource(AIR_TEMP_C))
+bn.set_input("temperature",  geobn.ConstantSource(AIR_TEMP_C))
 ```
 
 ### 5. Configure discretization
 
 ```python
-bn.set_discretization("slope_angle", [0, 25, 40, 90],   ["gentle", "steep", "extreme"])
-bn.set_discretization("aspect",      [0.0, 0.5, 1.5],   ["favorable", "unfavorable"])
-bn.set_discretization("recent_snow", [0, 10, 25, 150],  ["light", "moderate", "heavy"])
-bn.set_discretization("temperature", [-40, -8, -2, 15], ["cold", "moderate", "warming"])
+bn.set_discretization("slope_angle",  [0, 5, 25, 40, 90])
+bn.set_discretization("sun_exposure", [-0.5, 0.5, 1.5, 2.5, 3.5])
+bn.set_discretization("recent_snow",  [0, 10, 25, 150])
+bn.set_discretization("temperature",  [-40, -8, -2, 15])
 ```
 
 ### 6. Run inference and export

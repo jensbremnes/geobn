@@ -12,7 +12,10 @@ import geobn
 
 bn = geobn.load("avalanche_risk.bif")
 
-bn.set_input("slope_angle", geobn.KartverketDTMSource())   # fetched from WCS
+bn.set_input("slope_angle", geobn.WCSSource(
+    url="https://hoydedata.no/arcgis/services/las_dtm_somlos/ImageServer/WCSServer",
+    layer="las_dtm", version="1.0.0", valid_range=(-500, 9000),
+))  # Kartverket DTM via WCS
 bn.set_input("recent_snow", geobn.ConstantSource(30.0))    # 30 cm snowfall
 bn.set_input("temperature", geobn.ConstantSource(-5.0))    # −5 °C
 
@@ -28,7 +31,7 @@ result.to_geotiff("out/")  # multi-band GeoTIFF per query node
 ## Why geobn?
 
 - **No special GIS knowledge required** — wire any Python data source to a BN node.
-- **Pure-Python reprojection** — numpy + pyproj only; rasterio is optional.
+- **Pure-Python reprojection** — numpy + pyproj only; no rasterio needed for grid alignment.
 - **NaN-aware** — NoData pixels are excluded from inference and stay NaN in outputs.
 - **Efficient batching** — unique evidence combinations are grouped; one pgmpy query
   per unique combo, not per pixel.

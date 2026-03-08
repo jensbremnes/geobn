@@ -16,7 +16,7 @@ The `dev` extra adds pytest to the standard install.
 uv run pytest tests/ -v
 ```
 
-All 125 tests must pass before committing. Tests are fully offline — no real network
+All 101 tests must pass before committing. Tests are fully offline — no real network
 calls are made (HTTP sources are mocked with `unittest.mock.patch`).
 
 ### Test conventions
@@ -28,7 +28,7 @@ calls are made (HTTP sources are mocked with `unittest.mock.patch`).
 
 1. Create `src/geobn/sources/my_source.py` following the `DataSource` ABC.
 2. Export from `src/geobn/sources/__init__.py` and `src/geobn/__init__.py`.
-3. Add tests to `tests/test_new_sources.py` (or a new file).
+3. Add tests to `tests/test_sources.py`.
 
 Every source must implement:
 

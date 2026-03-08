@@ -44,7 +44,7 @@ bn.set_input("recent_snow", source)
 **Example:**
 
 ```python
-source = geobn.RasterSource("dem_10m.tif", band=1)
+source = geobn.RasterSource("dem_10m.tif")
 bn.set_input("elevation", source)
 ```
 
