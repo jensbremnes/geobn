@@ -189,13 +189,13 @@ probability ( weather_factor | recent_snow, temperature, wind_load ) {
 // Derived from the 3-state CPT by splitting medium 50/50 into low and high:
 
 probability ( avalanche_risk | terrain_factor, weather_factor ) {
-  (low,    stable)     0.96, 0.04;
-  (low,    elevated)   0.825, 0.175;
-  (low,    dangerous)  0.62, 0.38;
-  (medium, stable)     0.66, 0.34;
-  (medium, elevated)   0.45, 0.55;
-  (medium, dangerous)  0.22, 0.78;
-  (high,   stable)     0.48, 0.52;
-  (high,   elevated)   0.21, 0.79;
-  (high,   dangerous)  0.08, 0.92;
+  (low,    stable)     0.93, 0.07;
+  (low,    elevated)   0.77, 0.23;
+  (low,    dangerous)  0.53, 0.47;
+  (medium, stable)     0.59, 0.41;
+  (medium, elevated)   0.36, 0.64;
+  (medium, dangerous)  0.16, 0.84;
+  (high,   stable)     0.38, 0.62;
+  (high,   elevated)   0.15, 0.85;
+  (high,   dangerous)  0.05, 0.95;
 }
