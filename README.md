@@ -80,7 +80,7 @@ bn.set_grid("EPSG:4326", resolution=0.005, extent=(19.8, 69.35, 21.0, 69.75))
 
 ### Connecting data sources
 
-Attach a `DataSource` to each evidence node. Sources can be remote services, local files, derived arrays, or plain scalars — they are all reprojected and aligned to a common grid at inference time.
+Attach a `DataSource` to each evidence node. Sources can be remote services, local files, derived arrays, or plain scalars — they are all reprojected and aligned to a common grid at inference time. DataSource objects are **declarative** — constructing one performs no I/O. Data is fetched lazily when you call `bn.infer()` (or `bn.fetch_raw()` for manual extraction).
 
 ```python
 # WCSSource — fetch data (e.g., terrain) from WVS server
