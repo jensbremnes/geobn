@@ -8,8 +8,7 @@ cd geobn
 uv pip install -e ".[dev]"
 ```
 
-The `dev` extra includes `geobn[full]` (rasterio, folium, matplotlib, xarray) plus
-pytest.
+The `dev` extra adds pytest to the standard install.
 
 ## Running tests
 
@@ -24,17 +23,12 @@ calls are made (HTTP sources are mocked with `unittest.mock.patch`).
 
 - Fixtures live in `tests/conftest.py`.
 - Use `unittest.mock.patch("requests.get", ...)` to mock HTTP sources.
-- Use `patch.dict(sys.modules, {"copernicusmarine": None})` to simulate missing optional deps.
-- Use `pytest.importorskip("rasterio")` to skip rasterio-dependent tests.
 
 ## Adding a new data source
 
 1. Create `src/geobn/sources/my_source.py` following the `DataSource` ABC.
 2. Export from `src/geobn/sources/__init__.py` and `src/geobn/__init__.py`.
 3. Add tests to `tests/test_new_sources.py` (or a new file).
-4. If the source needs an optional package, add it to the right extra in `pyproject.toml`.
-5. Update `CLAUDE.md` (the AI agent instructions) to document the new source.
-6. Commit and push.
 
 Every source must implement:
 
@@ -44,10 +38,7 @@ class MySource(DataSource):
         ...
 ```
 
-Follow lazy-import conventions: optional dependencies are imported **inside** `fetch()`,
-never at module level. Raise `ImportError` with an install hint on missing deps.
-
-If the source requires credentials, validate them **before** the lazy import.
+If the source requires credentials, validate them in `__init__()` before `fetch()` is called.
 
 ## Building docs locally
 

@@ -21,7 +21,6 @@ def small_grid():
 
 
 def _make_tiff_bytes(arr):
-    rasterio = pytest.importorskip("rasterio")
     from rasterio.io import MemoryFile
     from rasterio.transform import from_bounds
 
@@ -38,7 +37,6 @@ def _make_tiff_bytes(arr):
 
 class TestWCSSourceCache:
     def test_cache_miss_fetches_and_saves(self, small_grid, tmp_path):
-        pytest.importorskip("rasterio")
         tiff = _make_tiff_bytes(np.ones((5, 5), np.float32) * 42.0)
         mock_resp = MagicMock(ok=True, content=tiff)
         with patch("requests.get", return_value=mock_resp) as mock_get:
@@ -51,7 +49,6 @@ class TestWCSSourceCache:
         assert any(tmp_path.glob("*.json"))
 
     def test_cache_hit_skips_network(self, small_grid, tmp_path):
-        pytest.importorskip("rasterio")
         tiff = _make_tiff_bytes(np.ones((5, 5), np.float32) * 7.0)
         mock_resp = MagicMock(ok=True, content=tiff)
         with patch("requests.get", return_value=mock_resp) as mock_get:
@@ -62,7 +59,6 @@ class TestWCSSourceCache:
         assert data.array.mean() == pytest.approx(7.0)
 
     def test_corrupt_cache_refetches(self, small_grid, tmp_path):
-        pytest.importorskip("rasterio")
         tiff = _make_tiff_bytes(np.ones((5, 5), np.float32))
         mock_resp = MagicMock(ok=True, content=tiff)
         with patch("requests.get", return_value=mock_resp):
@@ -76,7 +72,6 @@ class TestWCSSourceCache:
         mock_get2.assert_called_once()  # re-fetched after corrupt
 
     def test_no_cache_dir_does_not_write(self, small_grid, tmp_path):
-        pytest.importorskip("rasterio")
         tiff = _make_tiff_bytes(np.ones((5, 5), np.float32))
         mock_resp = MagicMock(ok=True, content=tiff)
         with patch("requests.get", return_value=mock_resp):
@@ -85,7 +80,6 @@ class TestWCSSourceCache:
         assert not any(tmp_path.glob("*.npy"))
 
     def test_different_grids_have_different_cache_entries(self, tmp_path):
-        pytest.importorskip("rasterio")
         grid_a = GridSpec(crs="EPSG:4326", transform=Affine(0.1, 0, 5.0, 0, -0.1, 62.0), shape=(5, 5))
         grid_b = GridSpec(crs="EPSG:4326", transform=Affine(0.1, 0, 10.0, 0, -0.1, 65.0), shape=(5, 5))
         tiff_a = _make_tiff_bytes(np.full((5, 5), 1.0, np.float32))
@@ -106,7 +100,6 @@ class TestWCSSourceCache:
 
 class TestURLSourceCache:
     def test_cache_hit_skips_network(self, tmp_path):
-        pytest.importorskip("rasterio")
         tiff = _make_tiff_bytes(np.ones((5, 5), np.float32) * 3.0)
         mock_resp = MagicMock()
         mock_resp.raise_for_status = lambda: None
@@ -119,7 +112,6 @@ class TestURLSourceCache:
         assert data.array.mean() == pytest.approx(3.0)
 
     def test_cache_miss_fetches_and_saves(self, tmp_path):
-        pytest.importorskip("rasterio")
         tiff = _make_tiff_bytes(np.ones((5, 5), np.float32) * 5.0)
         mock_resp = MagicMock()
         mock_resp.raise_for_status = lambda: None
@@ -132,7 +124,6 @@ class TestURLSourceCache:
         assert any(tmp_path.glob("*.npy"))
 
     def test_no_cache_dir_does_not_write(self, tmp_path):
-        pytest.importorskip("rasterio")
         tiff = _make_tiff_bytes(np.ones((5, 5), np.float32))
         mock_resp = MagicMock()
         mock_resp.raise_for_status = lambda: None
@@ -143,7 +134,6 @@ class TestURLSourceCache:
         assert not any(tmp_path.glob("*.npy"))
 
     def test_corrupt_cache_refetches(self, tmp_path):
-        pytest.importorskip("rasterio")
         tiff = _make_tiff_bytes(np.ones((5, 5), np.float32) * 9.0)
         mock_resp = MagicMock()
         mock_resp.raise_for_status = lambda: None

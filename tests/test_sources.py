@@ -28,7 +28,6 @@ def small_grid() -> GridSpec:
 
 def _make_geotiff_bytes(array: np.ndarray) -> bytes:
     """Build minimal in-memory GeoTIFF bytes using rasterio."""
-    rasterio = pytest.importorskip("rasterio")
     from rasterio.io import MemoryFile
     from rasterio.transform import from_bounds
 
@@ -90,16 +89,10 @@ def test_constant_source_returns_scalar():
 # RasterSource
 # ---------------------------------------------------------------------------
 
-def test_raster_source_requires_rasterio(tmp_path):
-    """RasterSource.fetch() should raise ImportError if rasterio is missing."""
-    import importlib
-    import sys
-
-    if importlib.util.find_spec("rasterio") is not None:
-        pytest.skip("rasterio is installed; skipping missing-rasterio test")
-
+def test_raster_source_missing_file_raises(tmp_path):
+    """RasterSource.fetch() should raise an error for a non-existent file."""
     source = geobn.RasterSource(tmp_path / "nonexistent.tif")
-    with pytest.raises(ImportError, match="rasterio"):
+    with pytest.raises(Exception):
         source.fetch()
 
 
@@ -163,8 +156,6 @@ def test_point_grid_source_affine_half_pixel_offset(small_grid):
 
 def test_wcs_source_valid_range_masks_sentinels(small_grid):
     """valid_range should replace out-of-range values with NaN."""
-    pytest.importorskip("rasterio")
-
     # Build a GeoTIFF with values including out-of-range sentinels
     raw = np.array([[100.0, -9999.0], [50.0, 9001.0]], dtype=np.float32)
     tiff_bytes = _make_geotiff_bytes(raw)
@@ -194,8 +185,6 @@ def test_wcs_source_valid_range_masks_sentinels(small_grid):
 
 def test_wcs_source_no_valid_range_passes_through(small_grid):
     """Without valid_range, out-of-range values are returned as-is."""
-    pytest.importorskip("rasterio")
-
     raw = np.array([[100.0, -9999.0]], dtype=np.float32)
     tiff_bytes = _make_geotiff_bytes(raw)
 

@@ -5,14 +5,14 @@ from pathlib import Path
 
 import numpy as np
 import requests
+import rasterio
+from rasterio.io import MemoryFile
 
 _log = logging.getLogger(__name__)
 
 from .._types import RasterData
 from ..grid import GridSpec
 from ._base import DataSource
-
-# rasterio is imported lazily; URLSource therefore also requires geobn[io].
 
 
 class URLSource(DataSource):
@@ -39,15 +39,6 @@ class URLSource(DataSource):
         self._cache_dir = Path(cache_dir).expanduser() if cache_dir is not None else None
 
     def fetch(self, grid: GridSpec | None = None) -> RasterData:
-        try:
-            import rasterio  # noqa: PLC0415
-            from rasterio.io import MemoryFile  # noqa: PLC0415
-        except ImportError as exc:
-            raise ImportError(
-                "rasterio is required for URLSource. "
-                "Install it with: pip install geobn[io]"
-            ) from exc
-
         # ── Cache check ───────────────────────────────────────────────────
         if self._cache_dir is not None:
             from ._cache import _load_cached, _make_cache_path, _save_cached  # noqa: PLC0415

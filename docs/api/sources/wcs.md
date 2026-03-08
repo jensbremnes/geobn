@@ -9,8 +9,6 @@
 `WCSSource` is a generic [OGC Web Coverage Service](https://www.ogc.org/standard/wcs/)
 client. It supports WCS 2.0.1, 1.1.1, and 1.0.0.
 
-Requires `pip install "geobn[io]"`.
-
 ### Request construction
 
 **WCS 2.0.1** uses `SUBSET` parameters:

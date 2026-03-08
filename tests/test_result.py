@@ -27,7 +27,6 @@ def test_entropy_shape(sample_result):
 
 
 def test_to_geotiff_creates_file(sample_result, tmp_path):
-    pytest.importorskip("rasterio")
     sample_result.to_geotiff(tmp_path)
     out = tmp_path / "fire_risk.tif"
     assert out.exists()

@@ -109,9 +109,9 @@ result.to_geotiff(OUT_DIR)
 ## Key outputs
 
 - **`output/map.html`** — interactive Leaflet map with risk probability overlay,
-  entropy overlay, slope angle overlay, and layer switcher (requires `[viz]`)
+  entropy overlay, slope angle overlay, and layer switcher
 - **`output/avalanche_risk.tif`** — 4-band GeoTIFF:
-  Band 1 P(low), Band 2 P(medium), Band 3 P(high), Band 4 entropy (requires `[io]`)
+  Band 1 P(low), Band 2 P(medium), Band 3 P(high), Band 4 entropy
 
 ## How to run
 

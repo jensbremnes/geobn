@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+import xarray as xr
 from affine import Affine
 
 from ._io import write_geotiff
@@ -79,8 +80,6 @@ class InferenceResult:
     ) -> Path:
         """Generate and optionally open an interactive Leaflet map.
 
-        Requires ``folium`` (``pip install geobn[viz]``).
-
         Parameters
         ----------
         output_dir:
@@ -118,22 +117,14 @@ class InferenceResult:
             show_entropy=show_entropy,
         )
 
-    def to_xarray(self) -> "xr.Dataset":
+    def to_xarray(self) -> xr.Dataset:
         """Return an xarray Dataset with spatial coordinates.
 
         Each query node becomes a DataArray with dimensions
         (state, y, x).  Entropy is added as a separate variable
         ``{node}_entropy`` with dimensions (y, x).
 
-        Requires ``xarray`` (``pip install "geobn[full]"``).
         """
-        try:
-            import xarray as xr
-        except ImportError as exc:
-            raise ImportError(
-                "xarray is required for to_xarray(). "
-                'Install it with: pip install "geobn[full]"'
-            ) from exc
 
         H, W = next(iter(self.probabilities.values())).shape[:2]
         transform = self.transform

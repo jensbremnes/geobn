@@ -1,15 +1,12 @@
-"""rasterio-backed I/O helpers.
-
-All rasterio imports are confined to this module.  Functions here are only
-called when the user explicitly writes output; the rest of the library
-never touches rasterio.
-"""
+"""rasterio-backed I/O helpers."""
 from __future__ import annotations
 
 from pathlib import Path
 
 import numpy as np
+import rasterio
 from affine import Affine
+from rasterio.crs import CRS
 
 
 def write_geotiff(
@@ -34,15 +31,6 @@ def write_geotiff(
     nodata:
         NoData value written into the file metadata.
     """
-    try:
-        import rasterio  # noqa: PLC0415
-        from rasterio.crs import CRS  # noqa: PLC0415
-    except ImportError as exc:
-        raise ImportError(
-            "rasterio is required to write GeoTIFFs. "
-            "Install it with: pip install geobn[io]"
-        ) from exc
-
     path = Path(path)
     bands, H, W = array.shape
 

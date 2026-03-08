@@ -1,8 +1,5 @@
 # Core Sources
 
-These sources are always available — no optional extras required (except `RasterSource`
-and `URLSource` which need `[io]`).
-
 ## ArraySource
 
 ::: geobn.ArraySource
@@ -44,8 +41,6 @@ bn.set_input("recent_snow", source)
     options:
       show_root_heading: true
 
-Requires `pip install "geobn[io]"`.
-
 **Example:**
 
 ```python
@@ -61,7 +56,7 @@ bn.set_input("elevation", source)
     options:
       show_root_heading: true
 
-Requires `pip install "geobn[io]"`. Supports optional disk caching.
+Supports optional disk caching.
 
 **Example:**
 

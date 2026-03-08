@@ -32,7 +32,7 @@ To also run the bundled examples, clone the repo instead:
 ```bash
 git clone https://github.com/jensebr/geobn.git
 cd geobn
-uv pip install -e ".[full]"
+uv pip install -e ".[dev]"
 ```
 
 ---
@@ -95,8 +95,8 @@ probs = result.probabilities["avalanche_risk"]  # (H, W, 3) — one band per sta
 ent   = result.entropy("avalanche_risk")        # (H, W)    — Shannon entropy in bits
 
 # Export
-result.to_xarray()          # xarray Dataset  (no rasterio needed)
-result.to_geotiff(out_dir)  # multi-band GeoTIFF (requires geobn[io])
+result.to_xarray()          # xarray Dataset
+result.to_geotiff(out_dir)  # multi-band GeoTIFF
 ```
 
 ---

@@ -31,7 +31,7 @@ Each root node (node with no parents) in the BN corresponds to an evidence varia
 Attach a [`DataSource`][geobn.sources.DataSource] to each one:
 
 ```python
-bn.set_input("slope_angle", geobn.KartverketDTMSource())
+bn.set_input("slope_angle", geobn.WCSSource(url="https://example.com/wcs", layer="dtm"))
 bn.set_input("recent_snow", geobn.ConstantSource(30.0))
 ```
 
@@ -96,21 +96,9 @@ unique combinations regardless of grid size.
 From an `InferenceResult` you can:
 
 - `result.entropy("node")` — Shannon entropy map (bits), shape (H, W)
-- `result.to_geotiff("out/")` — write multi-band GeoTIFFs (requires `[io]`)
-- `result.to_xarray()` — return an xarray Dataset (requires `[full]`)
-- `result.show_map()` — interactive Leaflet map (requires `[viz]`)
-
-## Lazy imports
-
-Optional dependencies (`rasterio`, `copernicusmarine`, `pystac_client`, `folium`,
-`xarray`) are imported inside `fetch()` or the method that needs them — never at module
-level. If the dependency is missing, a clear `ImportError` with an install hint is
-raised:
-
-```
-ImportError: rasterio is required for RasterSource.
-Install it with: pip install "geobn[io]"
-```
+- `result.to_geotiff("out/")` — write multi-band GeoTIFFs
+- `result.to_xarray()` — return an xarray Dataset
+- `result.show_map()` — interactive Leaflet map
 
 ## Real-time / repeated inference
 

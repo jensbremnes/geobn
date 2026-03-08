@@ -1,20 +1,14 @@
 """Tests for geobn._viz interactive map generation.
 
 All tests are offline (no browser opened, no network calls).
-The entire module is skipped when folium is not installed.
 """
 from __future__ import annotations
-
-import sys
-from unittest.mock import patch
 
 import numpy as np
 import pytest
 from affine import Affine
 
-folium = pytest.importorskip("folium")
-
-from geobn.result import InferenceResult  # noqa: E402
+from geobn.result import InferenceResult
 
 
 @pytest.fixture
@@ -50,15 +44,6 @@ def test_show_map_contains_overlays(simple_result, tmp_path):
 
     assert "entropy" in content
 
-
-def test_show_map_skips_without_folium(simple_result, tmp_path):
-    """ImportError with a helpful message is raised when folium is absent."""
-    with patch.dict(
-        sys.modules,
-        {"folium": None, "branca": None, "branca.colormap": None},
-    ):
-        with pytest.raises(ImportError, match="folium"):
-            simple_result.show_map(tmp_path, open_browser=False)
 
 
 def test_extra_layers_included(simple_result, tmp_path):

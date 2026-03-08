@@ -6,6 +6,7 @@ from pathlib import Path
 
 import numpy as np
 import requests
+from rasterio.io import MemoryFile
 
 _log = logging.getLogger(__name__)
 
@@ -76,14 +77,6 @@ class WCSSource(DataSource):
     # ------------------------------------------------------------------
 
     def fetch(self, grid: GridSpec | None = None) -> RasterData:
-        try:
-            from rasterio.io import MemoryFile  # noqa: PLC0415
-        except ImportError as exc:
-            raise ImportError(
-                "rasterio is required for WCSSource. "
-                "Install it with: pip install geobn[io]"
-            ) from exc
-
         if grid is None:
             raise ValueError(
                 "WCSSource requires a grid context to determine the spatial "

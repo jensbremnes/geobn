@@ -12,14 +12,14 @@ No rasterio objects are ever exposed outside a source module.
 
 ## Source catalogue
 
-| Source | Use case | Extra required |
-|--------|----------|---------------|
-| [`ArraySource`](core.md) | In-memory numpy array | — |
-| [`ConstantSource`](core.md) | Single scalar broadcast over the grid | — |
-| [`RasterSource`](core.md) | Local GeoTIFF file | `[io]` |
-| [`URLSource`](core.md) | Remote GeoTIFF via HTTP | `[io]` |
-| [`WCSSource`](wcs.md) | Generic OGC WCS endpoint | `[io]` |
-| [`PointGridSource`](core.md) | Sample any callable over an N×N lat/lon grid | — |
+| Source | Use case |
+|--------|----------|
+| [`ArraySource`](core.md) | In-memory numpy array |
+| [`ConstantSource`](core.md) | Single scalar broadcast over the grid |
+| [`RasterSource`](core.md) | Local GeoTIFF file |
+| [`URLSource`](core.md) | Remote GeoTIFF via HTTP |
+| [`WCSSource`](wcs.md) | Generic OGC WCS endpoint |
+| [`PointGridSource`](core.md) | Sample any callable over an N×N lat/lon grid |
 
 ## Grid-aware vs self-contained sources
 

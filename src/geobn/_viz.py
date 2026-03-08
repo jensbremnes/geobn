@@ -1,7 +1,4 @@
-"""Interactive Leaflet map visualisation for InferenceResult.
-
-Requires folium (``pip install geobn[viz]``).
-"""
+"""Interactive Leaflet map visualisation for InferenceResult."""
 from __future__ import annotations
 
 import base64
@@ -122,13 +119,7 @@ def show_map(
     Path
         Path to the written HTML file.
     """
-    try:
-        import folium
-    except ImportError as exc:
-        raise ImportError(
-            "folium is required for show_map(). "
-            "Install it with: pip install geobn[viz]"
-        ) from exc
+    import folium
 
     from pyproj import Transformer
 

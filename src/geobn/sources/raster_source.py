@@ -3,13 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import rasterio
 
 from .._types import RasterData
 from ..grid import GridSpec
 from ._base import DataSource
-
-# rasterio is imported lazily inside fetch() so the entire library works
-# even when rasterio is not installed.
 
 
 class RasterSource(DataSource):
@@ -23,14 +21,6 @@ class RasterSource(DataSource):
         self._path = Path(path)
 
     def fetch(self, grid: GridSpec | None = None) -> RasterData:
-        try:
-            import rasterio  # noqa: PLC0415
-        except ImportError as exc:
-            raise ImportError(
-                "rasterio is required for RasterSource. "
-                "Install it with: pip install geobn[io]"
-            ) from exc
-
         with rasterio.open(self._path) as src:
             array = src.read(1).astype(np.float32)
             crs = src.crs.to_string()
