@@ -112,8 +112,6 @@ result.to_geotiff(out_dir)  # multi-band GeoTIFF (requires geobn[io])
 | `WCSSource(url, layer, valid_range=...)` | Generic OGC WCS endpoint (terrain, bathymetry, …) |
 | `PointGridSource(fn)` | Sample any `fn(lat, lon) -> float` over the bounding box |
 
-`PointGridSource` is the generic primitive for any point-queryable API — pass a lambda that calls Open-Meteo, MET Norway, or any other service and the library handles the N×N sampling grid and bilinear resampling.
-
 ---
 
 ## Academic foundation
