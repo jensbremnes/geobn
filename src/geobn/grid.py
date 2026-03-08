@@ -109,7 +109,11 @@ def align_to_grid(data: RasterData, grid: GridSpec) -> np.ndarray:
     A source that already matches the target grid is returned as-is.
     """
     if data.crs is None:
-        # ConstantSource — broadcast scalar to reference shape
+        if data.array.shape == grid.shape:
+            # Pre-aligned array (ArraySource with no CRS) — return as-is
+            _log.debug("Pre-aligned array — no reprojection needed")
+            return data.array.astype(np.float32)
+        # Scalar broadcast (ConstantSource)
         _log.debug("Broadcasting constant %g → shape %s", float(data.array.flat[0]), grid.shape)
         return np.full(grid.shape, float(data.array.flat[0]), dtype=np.float32)
 

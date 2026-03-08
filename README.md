@@ -79,15 +79,15 @@ dtm = geobn.WCSSource(
 )
 
 # Also possible to extract data as raw numpy array, and do own processing
-dtm2 = bn.fetch_raw(dtm)
-slope_deg, sun_exposure = my_custom_function(dem)
+dtm_array = bn.fetch_raw(geobn.WCSSource(...))
+slope_deg, sun_exposure = my_custom_function(dtm_array)
 
-# set_input_array — wire derived numpy arrays (no CRS/transform needed; uses BN grid)
-bn.set_input_array("slope_angle",  slope_deg)
-bn.set_input_array("sun_exposure", sun_exposure)
+# ArraySource (with no CRS) - wire pre-aligned numpy arrays directly
+bn.set_input("slope_angle",  geobn.ArraySource(slope_deg))
+bn.set_input("sun_exposure", geobn.ArraySource(sun_exposure))
 
-# RasterSource — local GIS land-cover file (classes encoded as 0=sparse, 1=moderate, 2=dense)
-bn.set_input("forest_cover", geobn.RasterSource("ar5_land_cover.tif"))
+# RasterSource — local GIS land-cover file
+bn.set_input("forest_cover", geobn.RasterSource("forest_cover.tif"))
 
 # URLSource — remote Cloud-Optimised GeoTIFF; e.g. a satellite snow-depth product
 bn.set_input("recent_snow", geobn.URLSource("https://example.com/recent_snow.tif"))

@@ -6,7 +6,7 @@
     options:
       show_root_heading: true
 
-**Example:**
+**Example — with CRS metadata (full georeferencing):**
 
 ```python
 import numpy as np
@@ -15,6 +15,16 @@ from affine import Affine
 slope = np.random.rand(100, 200).astype("float32") * 45.0
 transform = Affine(0.01, 0, 10.0, 0, -0.01, 70.0)
 source = geobn.ArraySource(slope, crs="EPSG:4326", transform=transform)
+```
+
+**Example — pre-aligned array (no CRS needed):**
+
+```python
+# After fetching a DEM and computing slope analytically, the result
+# is already on the BN grid — pass it directly without CRS metadata.
+dem = bn.fetch_raw(geobn.WCSSource(...))
+slope_deg = compute_slope(dem)   # same shape as the BN grid
+bn.set_input("slope_angle", geobn.ArraySource(slope_deg))
 ```
 
 ---

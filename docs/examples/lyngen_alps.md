@@ -88,8 +88,8 @@ dz_drow, dz_dcol = np.gradient(dem_filled, pixel_lat_m, pixel_lon_m)
 bn = geobn.load("avalanche_risk.bif")
 bn.set_grid(CRS, RESOLUTION, (WEST, SOUTH, EAST, NORTH))
 
-bn.set_input_array("slope_angle",  slope_deg)
-bn.set_input_array("sun_exposure", sun_exposure)
+bn.set_input("slope_angle",  geobn.ArraySource(slope_deg))
+bn.set_input("sun_exposure", geobn.ArraySource(sun_exposure))
 bn.set_input("recent_snow", geobn.ConstantSource(RECENT_SNOW_CM))
 bn.set_input("temperature",  geobn.ConstantSource(AIR_TEMP_C))
 ```

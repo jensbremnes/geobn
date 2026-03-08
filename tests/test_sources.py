@@ -72,6 +72,17 @@ def test_array_source_rejects_3d(reference_transform):
         geobn.ArraySource(arr, crs="EPSG:4326", transform=reference_transform)
 
 
+def test_array_source_no_crs_returns_none_metadata():
+    """ArraySource with no crs/transform → RasterData with crs=None, transform=None."""
+    arr = np.ones((5, 5), dtype=np.float32)
+    source = geobn.ArraySource(arr)
+    data = source.fetch()
+    assert isinstance(data, RasterData)
+    assert data.crs is None
+    assert data.transform is None
+    np.testing.assert_array_equal(data.array, arr)
+
+
 # ---------------------------------------------------------------------------
 # ConstantSource
 # ---------------------------------------------------------------------------

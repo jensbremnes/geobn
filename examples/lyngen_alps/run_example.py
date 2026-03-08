@@ -223,9 +223,9 @@ def main() -> None:
     print(f"Forest cover: dense {dense_pct:.0f}%  moderate {moderate_pct:.0f}%  sparse {sparse_pct:.0f}%")
 
     # ── 3. Wire inputs ─────────────────────────────────────────────────────
-    bn.set_input_array("slope_angle",  slope_deg)
-    bn.set_input_array("sun_exposure", sun_exposure)
-    bn.set_input_array("forest_cover", forest_cover)
+    bn.set_input("slope_angle",  geobn.ArraySource(slope_deg))
+    bn.set_input("sun_exposure", geobn.ArraySource(sun_exposure))
+    bn.set_input("forest_cover", geobn.ArraySource(forest_cover))
     bn.set_input("recent_snow", geobn.ConstantSource(RECENT_SNOW_CM))
     bn.set_input("temperature",  geobn.ConstantSource(AIR_TEMP_C))
     bn.set_input("wind_load",    geobn.ConstantSource(WIND_SPEED_MS))

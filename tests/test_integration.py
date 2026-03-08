@@ -193,7 +193,7 @@ class TestAutoGridResolution:
             bn.infer(query=["fire_risk"])
 
 
-class TestFetchRawAndSetInputArray:
+class TestFetchRawAndArraySource:
     def test_fetch_raw_requires_grid(self, bn):
         with pytest.raises(RuntimeError, match="set_grid"):
             bn.fetch_raw(geobn.ConstantSource(1.0))
@@ -212,19 +212,11 @@ class TestFetchRawAndSetInputArray:
         assert isinstance(arr, np.ndarray)
         assert arr.shape == bn._grid.shape
 
-    def test_set_input_array_requires_grid(self, bn, slope_array):
-        with pytest.raises(RuntimeError, match="set_grid"):
-            bn.set_input_array("slope", slope_array)
-
-    def test_set_input_array_registers_source(self, bn, slope_array):
+    def test_array_source_no_crs_end_to_end(self, bn, slope_array, rainfall_array):
+        """ArraySource(array) with no crs/transform is pre-aligned to the BN grid."""
         bn.set_grid("EPSG:4326", 0.1, (0.0, 49.0, 1.0, 50.0))
-        bn.set_input_array("slope", slope_array)
-        assert "slope" in bn._inputs
-
-    def test_set_input_array_end_to_end(self, bn, slope_array, rainfall_array):
-        bn.set_grid("EPSG:4326", 0.1, (0.0, 49.0, 1.0, 50.0))
-        bn.set_input_array("slope", slope_array)
-        bn.set_input_array("rainfall", rainfall_array)
+        bn.set_input("slope",    geobn.ArraySource(slope_array))
+        bn.set_input("rainfall", geobn.ArraySource(rainfall_array))
         bn.set_discretization("slope", [0, 10, 30, 90], ["flat", "moderate", "steep"])
         bn.set_discretization("rainfall", [0, 25, 75, 200], ["low", "medium", "high"])
 
