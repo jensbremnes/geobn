@@ -69,38 +69,37 @@ bn.set_grid("EPSG:4326", resolution=0.005, extent=(19.8, 69.35, 21.0, 69.75))
 Attach a `DataSource` to each evidence node. Sources can be remote services, local files, derived arrays, or plain scalars — they are all reprojected and aligned to a common grid at inference time.
 
 ```python
-# WCSSource — remote terrain model via OGC WCS (cached to disk after first fetch)
-bn.set_input("elevation", geobn.WCSSource(
+# WCSSource — fetch the DEM once; derive all terrain inputs from it
+dtm = geobn.WCSSource(
     url="https://hoydedata.no/arcgis/services/las_dtm_somlos/ImageServer/WCSServer",
     layer="las_dtm",
     version="1.0.0",
     valid_range=(-500, 9000),  # replaces out-of-range sentinel values with NaN
     cache_dir="cache/",
-))
+)
 
-# Fetch the raw array, derive slope / aspect / forest cover, then wire them back in
-dem = bn.fetch_raw(geobn.WCSSource(...))
-slope_deg, sun_exposure = compute_slope_aspect(dem)
-forest_cover = np.where(dem < 400, 2.0, np.where(dem < 800, 1.0, 0.0))  # treeline heuristic
+# Also possible to extract data as raw numpy array, and do own processing
+dtm2 = bn.fetch_raw(dtm)
+slope_deg, sun_exposure = my_custom_function(dem)
 
-# set_input_array — derived numpy arrays (no CRS/transform needed; uses the BN grid)
+# set_input_array — wire derived numpy arrays (no CRS/transform needed; uses BN grid)
 bn.set_input_array("slope_angle",  slope_deg)
 bn.set_input_array("sun_exposure", sun_exposure)
-bn.set_input_array("forest_cover", forest_cover)
 
-# RasterSource — local GeoTIFF (alternative if you have a pre-computed forest cover file)
-bn.set_input("forest_cover", geobn.RasterSource("forest_cover.tif"))
+# RasterSource — local GIS land-cover file (classes encoded as 0=sparse, 1=moderate, 2=dense)
+bn.set_input("forest_cover", geobn.RasterSource("ar5_land_cover.tif"))
 
-# URLSource — remote Cloud-Optimised GeoTIFF (e.g. wind model output)
-bn.set_input("wind_load", geobn.URLSource("https://example.com/wind_load.tif"))
+# URLSource — remote Cloud-Optimised GeoTIFF; e.g. a satellite snow-depth product
+bn.set_input("recent_snow", geobn.URLSource("https://example.com/recent_snow.tif"))
 
 # PointGridSource — sample any fn(lat, lon) -> float over the bounding box
+# Useful for point weather APIs (MET Norway Frost, Open-Meteo, etc.)
 import requests
-def fetch_snow_depth(lat, lon):
-    r = requests.get(f"https://api.example.com/snow?lat={lat}&lon={lon}")
-    return r.json()["depth_cm"]
+def fetch_wind_speed(lat, lon):
+    r = requests.get(f"https://api.example.com/wind?lat={lat}&lon={lon}")
+    return r.json()["wind_speed_ms"]
 
-bn.set_input("recent_snow", geobn.PointGridSource(fetch_snow_depth, sample_points=20))
+bn.set_input("wind_load", geobn.PointGridSource(fetch_wind_speed, sample_points=20))
 
 # ConstantSource — broadcast a single scalar over the entire grid
 bn.set_input("temperature", geobn.ConstantSource(-5.0))   # °C
