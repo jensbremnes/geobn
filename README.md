@@ -123,12 +123,12 @@ bn.set_input("temperature", geobn.ConstantSource(-5.0))   # °C
 Breakpoints map continuous raster values into the discrete states your BN expects. The number of intervals must match the number of states for that node.
 
 ```python
-bn.set_discretization("slope_angle",  [0, 5, 25, 40, 90])      # °
+bn.set_discretization("slope_angle",  [0, 5, 25, 40, 90])          # °
 bn.set_discretization("sun_exposure", [-0.5, 0.5, 1.5, 2.5, 3.5])  # N/E/W/S
-bn.set_discretization("forest_cover", [-0.5, 0.5, 1.5, 2.5])   # sparse/moderate/dense
-bn.set_discretization("wind_load",    [0, 5, 15, 50])           # m/s
-bn.set_discretization("recent_snow",  [0, 10, 25, 150])         # cm
-bn.set_discretization("temperature",  [-40, -8, -2, 15])        # °C
+bn.set_discretization("forest_cover", [-0.5, 0.5, 1.5, 2.5])       # sparse/moderate/dense
+bn.set_discretization("wind_load",    [0, 5, 15, 50])               # m/s
+bn.set_discretization("recent_snow",  [0, 10, 25, 150])             # cm
+bn.set_discretization("temperature",  [-40, -8, -2, 15])            # °C
 ```
 
 ### Running inference
