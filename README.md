@@ -156,6 +156,26 @@ result.to_geotiff("out/")   # multi-band GeoTIFF: N probability bands + entropy
 result.show_map("out/")     # interactive Leaflet map
 ```
 
+### Caching remote data to disk
+
+`URLSource` and `WCSSource` accept a `cache_dir` argument. When set, fetched data is written to disk as `.npy` files and reused on subsequent runs — **including across Python sessions and script restarts**. No network request is made if a matching cache file already exists.
+
+The cache key is a SHA-256 hash of the URL and request parameters (bounding box, resolution, layer), so changing the grid or source automatically triggers a fresh fetch.
+
+```python
+dtm = geobn.WCSSource(
+    url="https://hoydedata.no/arcgis/services/las_dtm_somlos/ImageServer/WCSServer",
+    layer="las_dtm",
+    version="1.0.0",
+    valid_range=(-500, 9000),
+    cache_dir="cache/",   # survives process restarts
+)
+
+snow = geobn.URLSource("https://example.com/recent_snow.tif", cache_dir="cache/")
+```
+
+This is particularly useful when iterating on discretization rules or BN structure — fetch the terrain data once, then experiment freely without waiting for remote requests on every run.
+
 ### Repeated inference with changing inputs
 
 When static inputs (terrain) are mixed with inputs that change between runs (weather), freeze the static nodes so their arrays are fetched and discretized only once:
