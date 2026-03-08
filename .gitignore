@@ -12,6 +12,7 @@ htmlcov/
 output/
 cache/
 private/
+site/
 *.DS_Store
 CLAUDE.md
 .claude/
