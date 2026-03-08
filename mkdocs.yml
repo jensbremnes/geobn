@@ -64,9 +64,6 @@ nav:
     - Data Sources:
       - Overview: api/sources/index.md
       - Core sources: api/sources/core.md
-      - Weather sources: api/sources/weather.md
-      - Terrain & Bathymetry: api/sources/terrain.md
-      - Ocean & AIS: api/sources/ocean.md
       - Generic WCS: api/sources/wcs.md
     - Internals: api/internals.md
   - Examples:

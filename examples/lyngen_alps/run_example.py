@@ -9,10 +9,10 @@ explore different weather scenarios.
 
 Data sources
 ------------
-KartverketDTMSource
+WCSSource (Kartverket DTM)
     Norwegian 10 m Digital Terrain Model from Kartverket's free WCS.
     Requires internet on first run; coverage: mainland Norway only.
-    https://wcs.geonorge.no/skwms1/wcs.hoyde-dtm10
+    https://hoydedata.no/arcgis/services/las_dtm_somlos/ImageServer/WCSServer
 
 ConstantSource
     Broadcasts a single scalar value over the entire grid.
@@ -158,8 +158,18 @@ def main() -> None:
 
     # ── 2. Fetch DTM and derive terrain inputs ────────────────────────────
     print("\nFetching Kartverket DTM (cached after first run) ...")
+    _KARTVERKET_URL = (
+        "https://hoydedata.no/arcgis/services/las_dtm_somlos/ImageServer/WCSServer"
+    )
     try:
-        dem = bn.fetch_raw(geobn.KartverketDTMSource(cache_dir=CACHE_DIR))
+        dem = bn.fetch_raw(geobn.WCSSource(
+            url=_KARTVERKET_URL,
+            layer="las_dtm",
+            version="1.0.0",
+            format="GeoTIFF",
+            valid_range=(-500.0, 9000.0),
+            cache_dir=CACHE_DIR,
+        ))
     except Exception as exc:
         sys.exit(f"ERROR fetching DTM: {exc}")
 

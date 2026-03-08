@@ -41,6 +41,12 @@ class WCSSource(DataSource):
         Additional ``SUBSET=`` values appended to the WCS 2.0 request (e.g.
         ``['time("2023-01-01T00:00:00.000Z")']`` for time-aware coverages).
         Ignored for WCS 1.x requests.
+    valid_range:
+        Optional ``(lo, hi)`` tuple. After fetching, pixels outside this
+        range are set to NaN.  Use this to mask out nodata sentinels that
+        the server encodes as extreme numeric values (e.g. ``(-500, 9000)``
+        for Norwegian DTM data where values below −500 m or above 9000 m
+        are fill values).
     """
 
     requires_grid = True
@@ -54,6 +60,7 @@ class WCSSource(DataSource):
         timeout: int = 60,
         cache_dir: str | Path | None = None,
         extra_subsets: list[str] | None = None,
+        valid_range: tuple[float, float] | None = None,
     ) -> None:
         self._url = url
         self._layer = layer
@@ -62,6 +69,7 @@ class WCSSource(DataSource):
         self._timeout = timeout
         self._cache_dir = Path(cache_dir).expanduser() if cache_dir is not None else None
         self._extra_subsets = extra_subsets or []
+        self._valid_range = valid_range
 
     # ------------------------------------------------------------------
     # DataSource interface
@@ -124,6 +132,10 @@ class WCSSource(DataSource):
                 array = src.read(1).astype(np.float32)
                 crs = src.crs.to_string()
                 transform = src.transform
+
+        if self._valid_range is not None:
+            lo, hi = self._valid_range
+            array[(array < lo) | (array > hi)] = np.nan
 
         result = RasterData(array=array, crs=crs, transform=transform)
 

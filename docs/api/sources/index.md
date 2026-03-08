@@ -18,16 +18,8 @@ No rasterio objects are ever exposed outside a source module.
 | [`ConstantSource`](core.md) | Single scalar broadcast over the grid | — |
 | [`RasterSource`](core.md) | Local GeoTIFF file | `[io]` |
 | [`URLSource`](core.md) | Remote GeoTIFF via HTTP | `[io]` |
-| [`OpenMeteoSource`](weather.md) | Historical/forecast weather (Open-Meteo) | — |
-| [`METOceanForecastSource`](weather.md) | Wave height, current speed (MET Norway) | — |
-| [`METLocationForecastSource`](weather.md) | Wind speed/direction (MET Norway) | — |
-| [`KartverketDTMSource`](terrain.md) | Norwegian 10 m Digital Terrain Model | `[io]` |
-| [`EMODnetBathymetrySource`](terrain.md) | European seabed depth | `[io]` |
-| [`EMODnetShippingDensitySource`](terrain.md) | Historical vessel traffic density | `[io]` |
 | [`WCSSource`](wcs.md) | Generic OGC WCS endpoint | `[io]` |
-| [`CopernicusMarineSource`](ocean.md) | CMEMS ocean model data | `[ocean]` |
-| [`HubOceanSource`](ocean.md) | HubOcean STAC catalog | `[ocean]` |
-| [`BarentswatchAISSource`](ocean.md) | Live/historical AIS vessel positions | — |
+| [`PointGridSource`](core.md) | Sample any callable over an N×N lat/lon grid | — |
 
 ## Grid-aware vs self-contained sources
 
@@ -38,10 +30,7 @@ ignore the `grid` argument. They carry their own spatial metadata.
 query. They call `grid.extent_wgs84()` to obtain `(lon_min, lat_min, lon_max, lat_max)`
 before making API or WCS requests.
 
-Grid-aware sources are: `OpenMeteoSource`, `WCSSource`, `KartverketDTMSource`,
-`EMODnetBathymetrySource`, `EMODnetShippingDensitySource`, `METOceanForecastSource`,
-`METLocationForecastSource`, `CopernicusMarineSource`, `BarentswatchAISSource`,
-`HubOceanSource`.
+Grid-aware sources are: `WCSSource`, `PointGridSource`.
 
 ## DataSource ABC
 

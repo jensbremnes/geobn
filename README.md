@@ -56,7 +56,7 @@ DataSources  →  align to grid  →  discretize  →  BN inference  →  Infere
 
 | Example | Description |
 |---|---|
-| [`examples/lyngen_alps/`](examples/lyngen_alps/) | Avalanche risk: real Kartverket DTM + configurable weather, Lyngen Alps, Norway |
+| [`examples/lyngen_alps/`](examples/lyngen_alps/) | Avalanche risk: Kartverket DTM via WCSSource + configurable weather, Lyngen Alps, Norway |
 
 Run from the repo root:
 
@@ -103,39 +103,16 @@ result.to_geotiff(out_dir)  # multi-band GeoTIFF (requires geobn[io])
 
 ## Data sources
 
-**Core**
-
 | Class | Use case |
 |---|---|
-| `ArraySource(array, crs, transform)` | In-memory numpy array (QGIS, preprocessed data) |
+| `ArraySource(array, crs, transform)` | In-memory numpy array |
 | `ConstantSource(value)` | Broadcast a scalar over the entire grid |
 | `RasterSource(path)` | Local GeoTIFF / any rasterio-readable file |
 | `URLSource(url)` | Remote Cloud-Optimised GeoTIFF |
-| `WCSSource(url, layer)` | Generic OGC WCS endpoint |
+| `WCSSource(url, layer, valid_range=...)` | Generic OGC WCS endpoint (terrain, bathymetry, …) |
+| `PointGridSource(fn)` | Sample any `fn(lat, lon) -> float` over the bounding box |
 
-**Weather**
-
-| Class | Use case |
-|---|---|
-| `OpenMeteoSource(variable, date)` | Historical/forecast weather from [open-meteo.com](https://open-meteo.com/) |
-| `METOceanForecastSource(variable)` | Wave height, current speed (MET Norway) |
-| `METLocationForecastSource(variable)` | Wind speed/direction (MET Norway) |
-
-**Terrain & bathymetry**
-
-| Class | Use case |
-|---|---|
-| `KartverketDTMSource()` | Norwegian 10 m Digital Terrain Model |
-| `EMODnetBathymetrySource()` | European seabed depth |
-| `EMODnetShippingDensitySource()` | Historical vessel traffic density |
-
-**Ocean & maritime**
-
-| Class | Use case |
-|---|---|
-| `CopernicusMarineSource(dataset, variable)` | CMEMS ocean model data (`geobn[ocean]`) |
-| `HubOceanSource(collection, variable)` | HubOcean STAC catalog (`geobn[ocean]`) |
-| `BarentswatchAISSource(client_id, secret)` | Live/historical AIS vessel positions |
+`PointGridSource` is the generic primitive for any point-queryable API — pass a lambda that calls Open-Meteo, MET Norway, or any other service and the library handles the N×N sampling grid and bilinear resampling.
 
 ---
 
