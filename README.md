@@ -44,9 +44,9 @@ uv pip install -e ".[dev]"
 | `ArraySource(array, crs, transform)` | In-memory numpy array |
 | `ConstantSource(value)` | Broadcast a scalar over the entire grid |
 | `RasterSource(path)` | Local GeoTIFF / any rasterio-readable file |
-| `URLSource(url)` | Remote Cloud-Optimised GeoTIFF |
+| `URLSource(url, timeout, cache_dir)` | Remote Cloud-Optimised GeoTIFF |
 | `WCSSource(url, layer, valid_range=...)` | Generic OGC WCS endpoint (terrain, bathymetry, …) |
-| `PointGridSource(fn)` | Sample any `fn(lat, lon) -> float` over the bounding box with user-defined resolution |
+| `PointGridSource(fn, sample_points, delay)` | Sample any `fn(lat, lon) -> float` over the bounding box with user-defined resolution |
 
 ---
 
