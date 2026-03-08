@@ -3,6 +3,7 @@
 [![Tests](https://github.com/jensebr/geobn/actions/workflows/tests.yml/badge.svg)](https://github.com/jensebr/geobn/actions/workflows/tests.yml)
 [![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 Bayesian network inference over geospatial data.
 
@@ -211,6 +212,14 @@ Run from the repo root:
 ```bash
 uv run python examples/lyngen_alps/run_example.py
 ```
+
+---
+
+## Contributing
+
+Contributions are welcome! Whether it's a bug report, new data source, documentation fix, or feature idea — feel free to open an issue or pull request.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions and guidelines.
 
 ---
 
