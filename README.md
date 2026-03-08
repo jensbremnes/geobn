@@ -45,58 +45,106 @@ DataSources  →  align to grid  →  discretize  →  BN inference  →  Infere
 
 1. **Load a BN** — `geobn.load("model.bif")` reads a standard `.bif` file via pgmpy.
 2. **Attach sources** — each evidence node gets a `DataSource`. All sources are reprojected and resampled to a common grid at inference time (the finest-resolution georeferenced source sets the grid automatically, or call `bn.set_grid()` explicitly).
-3. **Discretize** — `set_discretization(node, breakpoints, labels)` bins continuous raster values into the discrete states your BN expects.
+3. **Discretize** — `set_discretization(node, breakpoints)` bins continuous values into the discrete states your BN expects.
 4. **Infer** — unique evidence combinations are batched; pgmpy `VariableElimination` runs once per unique combo, not once per pixel.
-5. **Pre-compute (optional)** — call `bn.precompute(query)` once before inference to exhaustively run `VariableElimination` across every possible combination of evidence states and store the results in a lookup table. Subsequent `bn.infer()` calls then reduce to a single array-index operation per pixel — no pgmpy at runtime at all. This is particularly valuable in real-time or interactive applications where the same BN is queried repeatedly with changing spatial data (e.g. updated weather inputs), because the combinatorial explosion is bounded by the number of discrete states, not by the number of pixels or API calls.
-6. **Export** — `InferenceResult` gives you a numpy array, an xarray Dataset, or a multi-band GeoTIFF (N probability bands + entropy).
+5. **Export** — `InferenceResult` gives you a numpy array, an xarray Dataset, or a multi-band GeoTIFF (N probability bands + entropy).
 
 ---
 
-## Examples
+## Usage
 
-| Example | Description |
-|---|---|
-| [`examples/lyngen_alps/`](examples/lyngen_alps/) | Avalanche risk: Kartverket DTM via WCSSource + configurable weather, Lyngen Alps, Norway |
-
-Run from the repo root:
-
-```bash
-uv run python examples/lyngen_alps/run_example.py
-```
-
----
-
-## Quick start
+### Loading a network
 
 ```python
 import geobn
-from pathlib import Path
 
-# Load a Bayesian network from a .bif file
-bn = geobn.load(Path("avalanche_risk.bif"))
+bn = geobn.load("fire_risk.bif")
+```
 
-# Attach data sources to evidence nodes
-# slope_angle and aspect are derived from a real Kartverket DEM (see the example)
-bn.set_input("slope_angle", geobn.ArraySource(slope_deg,    crs="EPSG:4326", transform=transform))
-bn.set_input("aspect",      geobn.ArraySource(north_facing, crs="EPSG:4326", transform=transform))
-bn.set_input("recent_snow", geobn.ConstantSource(30.0))   # 30 cm snowfall
-bn.set_input("temperature", geobn.ConstantSource(-5.0))   # -5°C
+### Connecting data sources
 
-# Define breakpoints for continuous → discrete conversion
-bn.set_discretization("slope_angle", [0, 25, 40, 90],   ["gentle", "steep", "extreme"])
-bn.set_discretization("aspect",      [0.0, 0.5, 1.5],   ["favorable", "unfavorable"])
-bn.set_discretization("recent_snow", [0, 10, 25, 150],  ["light", "moderate", "heavy"])
-bn.set_discretization("temperature", [-40, -8, -2, 15], ["cold", "moderate", "warming"])
+Attach a `DataSource` to each evidence node. Sources can be local files, remote services, or plain scalars — they are all reprojected and aligned to a common grid at inference time.
 
-# Run pixel-wise inference
-result = bn.infer(query=["avalanche_risk"])
+```python
+# Local GeoTIFF
+bn.set_input("slope",      geobn.RasterSource("slope.tif"))
 
-probs = result.probabilities["avalanche_risk"]  # (H, W, 3) — one band per state
-ent   = result.entropy("avalanche_risk")        # (H, W)    — Shannon entropy in bits
+# Remote terrain model via OGC WCS (cached to disk after first fetch)
+bn.set_input("elevation",  geobn.WCSSource(
+    url="https://example.com/wcs",
+    layer="dtm",
+    version="1.0.0",
+    valid_range=(-500, 9000),  # replaces out-of-range sentinels with NaN
+    cache_dir="cache/",
+))
 
-# Export
-result.to_xarray()          # xarray Dataset
-result.to_geotiff(out_dir)  # multi-band GeoTIFF
+# Any web API that returns a scalar per (lat, lon) point
+import requests
+def fetch_ndvi(lat, lon):
+    r = requests.get(f"https://api.example.com/ndvi?lat={lat}&lon={lon}")
+    return r.json()["ndvi"]
+
+bn.set_input("vegetation", geobn.PointGridSource(fetch_ndvi, sample_points=20))
+
+# Broadcast a single scalar over the entire grid — useful for weather scenarios
+bn.set_input("recent_rain", geobn.ConstantSource(15.0))  # 15 mm
+```
+
+### Discretizing continuous inputs
+
+Breakpoints map continuous raster values into the discrete states your BN expects. The number of intervals must match the number of states for that node.
+
+```python
+bn.set_discretization("slope",       [0, 10, 30, 90])     # flat / moderate / steep
+bn.set_discretization("elevation",   [0, 500, 1500, 4000]) # low / mid / high
+bn.set_discretization("vegetation",  [0.0, 0.3, 0.6, 1.0])
+bn.set_discretization("recent_rain", [0, 5, 20, 200])
+```
+
+### Running inference
+
+```python
+result = bn.infer(query=["fire_risk"])
+```
+
+`infer()` returns an `InferenceResult` with a posterior probability array and entropy map for each queried node.
+
+```python
+probs = result.probabilities["fire_risk"]  # (H, W, n_states) — one band per state
+ent   = result.entropy("fire_risk")        # (H, W) — Shannon entropy in bits
+
+# State names come directly from the .bif file
+for i, state in enumerate(result.state_names["fire_risk"]):
+    print(f"P({state}) mean: {probs[..., i].mean():.3f}")
+```
+
+### Exporting results
+
+```python
+result.to_xarray()          # xarray Dataset — integrates with existing geospatial workflows
+result.to_geotiff("out/")   # multi-band GeoTIFF: N probability bands + entropy
+result.show_map("out/")     # interactive Leaflet map in the browser
+```
+
+### Repeated inference with changing inputs
+
+When static inputs (e.g. terrain) are mixed with inputs that change between calls (e.g. weather), freeze the static nodes so their arrays are fetched and discretized only once:
+
+```python
+bn.freeze("slope", "elevation", "vegetation")  # fetched and cached on first infer()
+
+# Explore different weather scenarios without re-fetching terrain
+for rain_mm in [5, 15, 40]:
+    bn.set_input("recent_rain", geobn.ConstantSource(rain_mm))
+    result = bn.infer(query=["fire_risk"])
+    result.to_geotiff(f"out/rain_{rain_mm}mm/")
+```
+
+For maximum throughput, pre-run all evidence combinations once and reduce subsequent calls to a numpy index lookup:
+
+```python
+bn.precompute(query=["fire_risk"])  # one-time cost: runs all state combinations
+result = bn.infer(query=["fire_risk"])  # O(H×W) array indexing — no pgmpy at runtime
 ```
 
 ---
@@ -111,6 +159,20 @@ result.to_geotiff(out_dir)  # multi-band GeoTIFF
 | `URLSource(url)` | Remote Cloud-Optimised GeoTIFF |
 | `WCSSource(url, layer, valid_range=...)` | Generic OGC WCS endpoint (terrain, bathymetry, …) |
 | `PointGridSource(fn)` | Sample any `fn(lat, lon) -> float` over the bounding box |
+
+---
+
+## Examples
+
+| Example | Description |
+|---|---|
+| [`examples/lyngen_alps/`](examples/lyngen_alps/) | Avalanche risk: Kartverket DTM via WCSSource + configurable weather, Lyngen Alps, Norway |
+
+Run from the repo root:
+
+```bash
+uv run python examples/lyngen_alps/run_example.py
+```
 
 ---
 
