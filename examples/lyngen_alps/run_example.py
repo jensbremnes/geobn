@@ -234,7 +234,7 @@ def main() -> None:
     bn.set_discretization("slope_angle",  [0, 5, 25, 40, 90])
     bn.set_discretization("sun_exposure", [-0.5, 0.5, 1.5, 2.5, 3.5])
     bn.set_discretization("forest_cover", [-0.5, 0.5, 1.5, 2.5])   # sparse / moderate / dense
-    bn.set_discretization("recent_snow",  [0, 10, 25, 150])
+    bn.set_discretization("recent_snow",  [0, 15, 35, 150])
     bn.set_discretization("temperature",  [-40, -8, -2, 15])
     bn.set_discretization("wind_load",    [0, 5, 15, 50])            # low / moderate / high (m/s)
 
