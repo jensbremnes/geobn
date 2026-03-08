@@ -124,7 +124,7 @@ Breakpoints map continuous raster values into the discrete states your BN expect
 
 ```python
 bn.set_discretization("slope_angle",  [0, 5, 25, 40, 90])      # °
-bn.set_discretization("sun_exposure", [-0.5, 0.5, 1.5, 2.5, 3.5])
+bn.set_discretization("sun_exposure", [-0.5, 0.5, 1.5, 2.5, 3.5])  # N/E/W/S
 bn.set_discretization("forest_cover", [-0.5, 0.5, 1.5, 2.5])   # sparse/moderate/dense
 bn.set_discretization("wind_load",    [0, 5, 15, 50])           # m/s
 bn.set_discretization("recent_snow",  [0, 10, 25, 150])         # cm
