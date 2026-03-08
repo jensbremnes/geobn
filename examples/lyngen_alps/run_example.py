@@ -2,10 +2,10 @@
 
 Demonstrates pixel-wise Bayesian risk inference over real Norwegian terrain
 data. The Kartverket Digital Terrain Model (10 m resolution) is fetched via a
-free WCS endpoint; slope angle and aspect are derived analytically from the
-elevation grid. Weather inputs (recent snowfall, air temperature) are
-configurable scalar constants — edit the two lines at the top of this file to
-explore different weather scenarios.
+free WCS endpoint; slope angle, aspect, and forest cover are derived
+analytically from the elevation grid. Weather inputs (recent snowfall, air
+temperature, wind speed) are configurable scalar constants — edit the lines at
+the top of this file to explore different weather scenarios.
 
 Data sources
 ------------
@@ -19,18 +19,22 @@ ConstantSource
 
 Derived inputs
 --------------
-``slope_angle``  — slope in degrees computed from the DEM via numpy.gradient.
+``slope_angle``   — slope in degrees computed from the DEM via numpy.gradient.
 ``sun_exposure``  — aspect quadrant (0=north, 1=east, 2=west, 3=south) derived
-                   from the same DEM. Risk order: north > east > west > south.
+                    from the same DEM. Risk order: north > east > west > south.
+``forest_cover``  — treeline heuristic: dense below 400 m, moderate 400–800 m,
+                    sparse above 800 m (alpine zone). Derived from the DEM.
 
 Bayesian network (avalanche_risk.bif)
 --------------------------------------
     slope_angle ──┐
                    ├──► terrain_factor ──┐
-    sun_exposure ──┘                     ├──► avalanche_risk
-    recent_snow ──┐                      │
-                   ├──► weather_factor ──┘
-    temperature ──┘
+    sun_exposure ──┤                     │
+    forest_cover ──┘                     ├──► avalanche_risk
+    wind_load ──┐                        │
+                 ├──► weather_factor ────┘
+    recent_snow ─┤
+    temperature ─┘
 
 Outputs (examples/lyngen_alps/output/)
 ---------------------------------------
@@ -60,17 +64,18 @@ CRS = "EPSG:4326"
 RESOLUTION = 0.005   # ~200 m at 70°N  →  80 rows × 240 cols
 
 # ---------------------------------------------------------------------------
-# Weather scenario  (edit these two lines to explore different conditions)
+# Weather scenario  (edit these lines to explore different conditions)
 # ---------------------------------------------------------------------------
 RECENT_SNOW_CM = 30.0   # cm  — heavy recent snowfall (typical Lyngen winter)
 AIR_TEMP_C     = -5.0   # °C  — cold but not extreme
+WIND_SPEED_MS  =  8.0   # m/s — moderate wind loading
 
 OUT_DIR = Path(__file__).parent / "output"
 CACHE_DIR = Path(__file__).parent / "cache"  # terrain cached here after first run
 
 
 # ---------------------------------------------------------------------------
-# Slope and aspect derivation
+# Terrain derivation from DEM
 # ---------------------------------------------------------------------------
 
 def compute_slope_aspect(dem: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -137,6 +142,35 @@ def compute_slope_aspect(dem: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return slope_deg, sun_exposure
 
 
+def derive_forest_cover(dem: np.ndarray) -> np.ndarray:
+    """Return a forest cover array derived from elevation (treeline heuristic).
+
+    Lyngen Alps treeline is approximately 400 m. Above 800 m the terrain is
+    fully alpine and offers almost no snow anchoring.
+
+    Parameters
+    ----------
+    dem:
+        Elevation array (H, W) in metres. NaN = nodata.
+
+    Returns
+    -------
+    forest_cover : float32 (H, W)
+        Numeric codes matching the BN ``forest_cover`` states:
+          0 = sparse   (> 800 m — alpine zone)
+          1 = moderate (400–800 m — sub-alpine)
+          2 = dense    (< 400 m — forested valley)
+        NaN where DEM is NaN.
+    """
+    forest_cover = np.where(
+        dem < 400, 2.0,                 # dense forest in valley
+        np.where(dem < 800, 1.0, 0.0)  # moderate sub-alpine / sparse alpine
+    ).astype(np.float32)
+
+    forest_cover[np.isnan(dem)] = np.nan
+    return forest_cover
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -175,6 +209,7 @@ def main() -> None:
 
     dem[dem <= 0] = np.nan   # ocean / fjord surfaces (Kartverket returns 0 for sea level)
     slope_deg, sun_exposure = compute_slope_aspect(dem)
+    forest_cover = derive_forest_cover(dem)
 
     land_pixels = int(np.isfinite(dem).sum())
     north_pct = 100.0 * float(np.nanmean(sun_exposure == 0.0))
@@ -182,17 +217,26 @@ def main() -> None:
     print(f"Slope range : {np.nanmin(slope_deg):.1f}° – "
           f"{np.nanmax(slope_deg):.1f}°  (mean: {np.nanmean(slope_deg):.1f}°)")
 
+    dense_pct    = 100.0 * float(np.nanmean(forest_cover == 2.0))
+    moderate_pct = 100.0 * float(np.nanmean(forest_cover == 1.0))
+    sparse_pct   = 100.0 * float(np.nanmean(forest_cover == 0.0))
+    print(f"Forest cover: dense {dense_pct:.0f}%  moderate {moderate_pct:.0f}%  sparse {sparse_pct:.0f}%")
+
     # ── 3. Wire inputs ─────────────────────────────────────────────────────
     bn.set_input_array("slope_angle",  slope_deg)
     bn.set_input_array("sun_exposure", sun_exposure)
+    bn.set_input_array("forest_cover", forest_cover)
     bn.set_input("recent_snow", geobn.ConstantSource(RECENT_SNOW_CM))
     bn.set_input("temperature",  geobn.ConstantSource(AIR_TEMP_C))
+    bn.set_input("wind_load",    geobn.ConstantSource(WIND_SPEED_MS))
 
     # ── 4. Discretizations ────────────────────────────────────────────────
-    bn.set_discretization("slope_angle", [0, 5, 25, 40, 90])
+    bn.set_discretization("slope_angle",  [0, 5, 25, 40, 90])
     bn.set_discretization("sun_exposure", [-0.5, 0.5, 1.5, 2.5, 3.5])
-    bn.set_discretization("recent_snow", [0, 10, 25, 150])
-    bn.set_discretization("temperature", [-40, -8, -2, 15])
+    bn.set_discretization("forest_cover", [-0.5, 0.5, 1.5, 2.5])   # sparse / moderate / dense
+    bn.set_discretization("recent_snow",  [0, 10, 25, 150])
+    bn.set_discretization("temperature",  [-40, -8, -2, 15])
+    bn.set_discretization("wind_load",    [0, 5, 15, 50])            # low / moderate / high (m/s)
 
     # ── 5. Weather scenario summary ────────────────────────────────────────
     snow_state = (
@@ -205,9 +249,15 @@ def main() -> None:
         else "moderate" if AIR_TEMP_C < -2
         else "warming"
     )
+    wind_state = (
+        "low"      if WIND_SPEED_MS < 5
+        else "moderate" if WIND_SPEED_MS < 15
+        else "high"
+    )
     print(f"\nWeather scenario")
     print(f"  Recent snow  : {RECENT_SNOW_CM:.0f} cm   → {snow_state}")
     print(f"  Temperature  : {AIR_TEMP_C:.0f}°C   → {temp_state}")
+    print(f"  Wind speed   : {WIND_SPEED_MS:.0f} m/s  → {wind_state}")
 
     # ── 6. Run inference ───────────────────────────────────────────────────
     print("\nRunning BN inference ...")
@@ -246,6 +296,7 @@ def main() -> None:
             extra_layers={
                 "Slope angle (°)": slope_deg,
                 "Sun exposure": sun_exposure,
+                "Forest cover": forest_cover,
             },
         )
         print(f"\nInteractive map opened in browser → {html_path}")

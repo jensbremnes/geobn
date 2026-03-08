@@ -53,41 +53,57 @@ DataSources  →  align to grid  →  discretize  →  BN inference  →  Infere
 
 ## Usage
 
+The examples below use the bundled Lyngen Alps avalanche risk model (see [`examples/lyngen_alps/`](examples/lyngen_alps/)) and demonstrate all six source types.
+
 ### Loading a network
 
 ```python
 import geobn
 
-bn = geobn.load("fire_risk.bif")
+bn = geobn.load("avalanche_risk.bif")
+bn.set_grid("EPSG:4326", resolution=0.005, extent=(19.8, 69.35, 21.0, 69.75))
 ```
 
 ### Connecting data sources
 
-Attach a `DataSource` to each evidence node. Sources can be local files, remote services, or plain scalars — they are all reprojected and aligned to a common grid at inference time.
+Attach a `DataSource` to each evidence node. Sources can be remote services, local files, derived arrays, or plain scalars — they are all reprojected and aligned to a common grid at inference time.
 
 ```python
-# Local GeoTIFF
-bn.set_input("slope",      geobn.RasterSource("slope.tif"))
-
-# Remote terrain model via OGC WCS (cached to disk after first fetch)
-bn.set_input("elevation",  geobn.WCSSource(
-    url="https://example.com/wcs",
-    layer="dtm",
+# WCSSource — remote terrain model via OGC WCS (cached to disk after first fetch)
+bn.set_input("elevation", geobn.WCSSource(
+    url="https://hoydedata.no/arcgis/services/las_dtm_somlos/ImageServer/WCSServer",
+    layer="las_dtm",
     version="1.0.0",
-    valid_range=(-500, 9000),  # replaces out-of-range sentinels with NaN
+    valid_range=(-500, 9000),  # replaces out-of-range sentinel values with NaN
     cache_dir="cache/",
 ))
 
-# Any web API that returns a scalar per (lat, lon) point
+# Fetch the raw array, derive slope / aspect / forest cover, then wire them back in
+dem = bn.fetch_raw(geobn.WCSSource(...))
+slope_deg, sun_exposure = compute_slope_aspect(dem)
+forest_cover = np.where(dem < 400, 2.0, np.where(dem < 800, 1.0, 0.0))  # treeline heuristic
+
+# set_input_array — derived numpy arrays (no CRS/transform needed; uses the BN grid)
+bn.set_input_array("slope_angle",  slope_deg)
+bn.set_input_array("sun_exposure", sun_exposure)
+bn.set_input_array("forest_cover", forest_cover)
+
+# RasterSource — local GeoTIFF (alternative if you have a pre-computed forest cover file)
+bn.set_input("forest_cover", geobn.RasterSource("forest_cover.tif"))
+
+# URLSource — remote Cloud-Optimised GeoTIFF (e.g. wind model output)
+bn.set_input("wind_load", geobn.URLSource("https://example.com/wind_load.tif"))
+
+# PointGridSource — sample any fn(lat, lon) -> float over the bounding box
 import requests
-def fetch_ndvi(lat, lon):
-    r = requests.get(f"https://api.example.com/ndvi?lat={lat}&lon={lon}")
-    return r.json()["ndvi"]
+def fetch_snow_depth(lat, lon):
+    r = requests.get(f"https://api.example.com/snow?lat={lat}&lon={lon}")
+    return r.json()["depth_cm"]
 
-bn.set_input("vegetation", geobn.PointGridSource(fetch_ndvi, sample_points=20))
+bn.set_input("recent_snow", geobn.PointGridSource(fetch_snow_depth, sample_points=20))
 
-# Broadcast a single scalar over the entire grid — useful for weather scenarios
-bn.set_input("recent_rain", geobn.ConstantSource(15.0))  # 15 mm
+# ConstantSource — broadcast a single scalar over the entire grid
+bn.set_input("temperature", geobn.ConstantSource(-5.0))   # °C
 ```
 
 ### Discretizing continuous inputs
@@ -95,26 +111,28 @@ bn.set_input("recent_rain", geobn.ConstantSource(15.0))  # 15 mm
 Breakpoints map continuous raster values into the discrete states your BN expects. The number of intervals must match the number of states for that node.
 
 ```python
-bn.set_discretization("slope",       [0, 10, 30, 90])     # flat / moderate / steep
-bn.set_discretization("elevation",   [0, 500, 1500, 4000]) # low / mid / high
-bn.set_discretization("vegetation",  [0.0, 0.3, 0.6, 1.0])
-bn.set_discretization("recent_rain", [0, 5, 20, 200])
+bn.set_discretization("slope_angle",  [0, 5, 25, 40, 90])      # flat / gentle / steep / extreme
+bn.set_discretization("sun_exposure", [-0.5, 0.5, 1.5, 2.5, 3.5])
+bn.set_discretization("forest_cover", [-0.5, 0.5, 1.5, 2.5])   # sparse / moderate / dense
+bn.set_discretization("wind_load",    [0, 5, 15, 50])           # low / moderate / high (m/s)
+bn.set_discretization("recent_snow",  [0, 10, 25, 150])         # light / moderate / heavy (cm)
+bn.set_discretization("temperature",  [-40, -8, -2, 15])        # cold / moderate / warming (°C)
 ```
 
 ### Running inference
 
 ```python
-result = bn.infer(query=["fire_risk"])
+result = bn.infer(query=["avalanche_risk"])
 ```
 
 `infer()` returns an `InferenceResult` with a posterior probability array and entropy map for each queried node.
 
 ```python
-probs = result.probabilities["fire_risk"]  # (H, W, n_states) — one band per state
-ent   = result.entropy("fire_risk")        # (H, W) — Shannon entropy in bits
+probs = result.probabilities["avalanche_risk"]  # (H, W, n_states) — one band per state
+ent   = result.entropy("avalanche_risk")         # (H, W) — Shannon entropy in bits
 
 # State names come directly from the .bif file
-for i, state in enumerate(result.state_names["fire_risk"]):
+for i, state in enumerate(result.state_names["avalanche_risk"]):
     print(f"P({state}) mean: {probs[..., i].mean():.3f}")
 ```
 
@@ -128,23 +146,24 @@ result.show_map("out/")     # interactive Leaflet map in the browser
 
 ### Repeated inference with changing inputs
 
-When static inputs (e.g. terrain) are mixed with inputs that change between calls (e.g. weather), freeze the static nodes so their arrays are fetched and discretized only once:
+When static inputs (terrain) are mixed with inputs that change between runs (weather), freeze the static nodes so their arrays are fetched and discretized only once:
 
 ```python
-bn.freeze("slope", "elevation", "vegetation")  # fetched and cached on first infer()
+# Terrain nodes are frozen: fetched and cached on the first infer() call
+bn.freeze("slope_angle", "sun_exposure", "forest_cover")
 
-# Explore different weather scenarios without re-fetching terrain
-for rain_mm in [5, 15, 40]:
-    bn.set_input("recent_rain", geobn.ConstantSource(rain_mm))
-    result = bn.infer(query=["fire_risk"])
-    result.to_geotiff(f"out/rain_{rain_mm}mm/")
+# Sweep over wind scenarios without re-fetching or re-discretizing terrain
+for wind_ms in [3, 8, 20]:
+    bn.set_input("wind_load", geobn.ConstantSource(wind_ms))
+    result = bn.infer(query=["avalanche_risk"])
+    result.to_geotiff(f"out/wind_{wind_ms}ms/")
 ```
 
 For maximum throughput, pre-run all evidence combinations once and reduce subsequent calls to a numpy index lookup:
 
 ```python
-bn.precompute(query=["fire_risk"])  # one-time cost: runs all state combinations
-result = bn.infer(query=["fire_risk"])  # O(H×W) array indexing — no pgmpy at runtime
+bn.precompute(query=["avalanche_risk"])  # one-time cost: runs all state combinations
+result = bn.infer(query=["avalanche_risk"])  # O(H×W) array indexing — no pgmpy at runtime
 ```
 
 ---

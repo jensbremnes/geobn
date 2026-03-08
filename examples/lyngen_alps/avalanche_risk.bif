@@ -4,10 +4,12 @@
 // Structure:
 //   slope_angle ──┐
 //                  ├──► terrain_factor ──┐
-//   sun_exposure ────────┘                     ├──► avalanche_risk
-//   recent_snow ──┐                      │
-//                  ├──► weather_factor ──┘
-//   temperature ──┘
+//   sun_exposure ──┤                     │
+//   forest_cover ──┘                     ├──► avalanche_risk
+//   wind_load ──┐                        │
+//                ├──► weather_factor ────┘
+//   recent_snow ─┤
+//   temperature ─┘
 
 network avalanche_risk_bn {}
 
@@ -21,12 +23,20 @@ variable sun_exposure {
   type discrete [ 4 ] { north, east, west, south };
 }
 
+variable forest_cover {
+  type discrete [ 3 ] { sparse, moderate, dense };
+}
+
 variable recent_snow {
   type discrete [ 3 ] { light, moderate, heavy };
 }
 
 variable temperature {
   type discrete [ 3 ] { cold, moderate, warming };
+}
+
+variable wind_load {
+  type discrete [ 3 ] { low, moderate, high };
 }
 
 // ── Intermediate nodes ───────────────────────────────────────────────────────
@@ -55,6 +65,10 @@ probability ( sun_exposure ) {
   table 0.25, 0.25, 0.25, 0.25;
 }
 
+probability ( forest_cover ) {
+  table 0.333, 0.333, 0.334;
+}
+
 probability ( recent_snow ) {
   table 0.333, 0.333, 0.334;
 }
@@ -63,49 +77,111 @@ probability ( temperature ) {
   table 0.333, 0.333, 0.334;
 }
 
-// ── P(terrain_factor | slope_angle, sun_exposure) ──────────────────────────────────
+probability ( wind_load ) {
+  table 0.333, 0.333, 0.334;
+}
+
+// ── P(terrain_factor | slope_angle, sun_exposure, forest_cover) ───────────────
 // Discretization: slope_angle ← [0, 5, 25, 40, 90]°
 //                 sun_exposure ← aspect quadrant; risk order: north > east > west > south
 //                   north (N-facing): shadowed, wind-loaded — highest risk
 //                   east              higher risk (morning sun only, cold nights)
 //                   west              moderate risk (afternoon sun)
 //                   south (S-facing): sun-exposed, snow consolidates — lowest risk
+//                 forest_cover ← elevation-derived; dense forest anchors snow
 // P(low, medium, high) for each parent combination:
 
-probability ( terrain_factor | slope_angle, sun_exposure ) {
-  (flat,    north)   0.97, 0.020, 0.010;
-  (flat,    east)    0.98, 0.015, 0.005;
-  (flat,    west)    0.98, 0.015, 0.005;
-  (flat,    south)   0.99, 0.009, 0.001;
-  (gentle,  north)   0.75, 0.18,  0.07;
-  (gentle,  east)    0.82, 0.13,  0.05;
-  (gentle,  west)    0.86, 0.11,  0.03;
-  (gentle,  south)   0.90, 0.08,  0.02;
-  (steep,   north)   0.10, 0.35,  0.55;
-  (steep,   east)    0.18, 0.45,  0.37;
-  (steep,   west)    0.22, 0.50,  0.28;
-  (steep,   south)   0.25, 0.55,  0.20;
-  (extreme, north)   0.08, 0.27,  0.65;
-  (extreme, east)    0.12, 0.35,  0.53;
-  (extreme, west)    0.16, 0.40,  0.44;
-  (extreme, south)   0.20, 0.45,  0.35;
+probability ( terrain_factor | slope_angle, sun_exposure, forest_cover ) {
+  // ── sparse (alpine zone: little snow anchoring) ─────────────────────────
+  (flat,    north, sparse)   0.970, 0.020, 0.010;
+  (flat,    east,  sparse)   0.980, 0.015, 0.005;
+  (flat,    west,  sparse)   0.980, 0.015, 0.005;
+  (flat,    south, sparse)   0.990, 0.009, 0.001;
+  (gentle,  north, sparse)   0.750, 0.180, 0.070;
+  (gentle,  east,  sparse)   0.820, 0.130, 0.050;
+  (gentle,  west,  sparse)   0.860, 0.110, 0.030;
+  (gentle,  south, sparse)   0.900, 0.080, 0.020;
+  (steep,   north, sparse)   0.100, 0.350, 0.550;
+  (steep,   east,  sparse)   0.180, 0.450, 0.370;
+  (steep,   west,  sparse)   0.220, 0.500, 0.280;
+  (steep,   south, sparse)   0.250, 0.550, 0.200;
+  (extreme, north, sparse)   0.080, 0.270, 0.650;
+  (extreme, east,  sparse)   0.120, 0.350, 0.530;
+  (extreme, west,  sparse)   0.160, 0.400, 0.440;
+  (extreme, south, sparse)   0.200, 0.450, 0.350;
+  // ── moderate (~30 % reduction in P(high)) ───────────────────────────────
+  (flat,    north, moderate) 0.970, 0.023, 0.007;
+  (flat,    east,  moderate) 0.980, 0.017, 0.003;
+  (flat,    west,  moderate) 0.980, 0.017, 0.003;
+  (flat,    south, moderate) 0.990, 0.009, 0.001;
+  (gentle,  north, moderate) 0.800, 0.170, 0.030;
+  (gentle,  east,  moderate) 0.860, 0.110, 0.030;
+  (gentle,  west,  moderate) 0.890, 0.090, 0.020;
+  (gentle,  south, moderate) 0.920, 0.070, 0.010;
+  (steep,   north, moderate) 0.180, 0.440, 0.380;
+  (steep,   east,  moderate) 0.270, 0.480, 0.250;
+  (steep,   west,  moderate) 0.310, 0.500, 0.190;
+  (steep,   south, moderate) 0.350, 0.500, 0.150;
+  (extreme, north, moderate) 0.110, 0.350, 0.540;
+  (extreme, east,  moderate) 0.160, 0.410, 0.430;
+  (extreme, west,  moderate) 0.210, 0.440, 0.350;
+  (extreme, south, moderate) 0.260, 0.490, 0.250;
+  // ── dense (~55 % reduction in P(high)) ──────────────────────────────────
+  (flat,    north, dense)    0.975, 0.020, 0.005;
+  (flat,    east,  dense)    0.983, 0.015, 0.002;
+  (flat,    west,  dense)    0.983, 0.015, 0.002;
+  (flat,    south, dense)    0.993, 0.006, 0.001;
+  (gentle,  north, dense)    0.870, 0.110, 0.020;
+  (gentle,  east,  dense)    0.910, 0.070, 0.020;
+  (gentle,  west,  dense)    0.930, 0.060, 0.010;
+  (gentle,  south, dense)    0.960, 0.030, 0.010;
+  (steep,   north, dense)    0.280, 0.470, 0.250;
+  (steep,   east,  dense)    0.380, 0.440, 0.180;
+  (steep,   west,  dense)    0.430, 0.450, 0.120;
+  (steep,   south, dense)    0.470, 0.420, 0.110;
+  (extreme, north, dense)    0.150, 0.420, 0.430;
+  (extreme, east,  dense)    0.210, 0.460, 0.330;
+  (extreme, west,  dense)    0.270, 0.470, 0.260;
+  (extreme, south, dense)    0.330, 0.480, 0.190;
 }
 
-// ── P(weather_factor | recent_snow, temperature) ─────────────────────────────
+// ── P(weather_factor | recent_snow, temperature, wind_load) ──────────────────
 // Discretization: recent_snow ← [0, 10, 25, 150] cm
 //                 temperature ← [-40, -8, -2, 15]°C
+//                 wind_load   ← [0, 5, 15, 50] m/s; high wind causes slab formation
 // P(stable, elevated, dangerous) for each parent combination:
 
-probability ( weather_factor | recent_snow, temperature ) {
-  (light,    cold)      0.85, 0.12, 0.03;
-  (light,    moderate)  0.75, 0.20, 0.05;
-  (light,    warming)   0.50, 0.38, 0.12;
-  (moderate, cold)      0.40, 0.45, 0.15;
-  (moderate, moderate)  0.25, 0.45, 0.30;
-  (moderate, warming)   0.10, 0.30, 0.60;
-  (heavy,    cold)      0.15, 0.35, 0.50;
-  (heavy,    moderate)  0.08, 0.27, 0.65;
-  (heavy,    warming)   0.03, 0.12, 0.85;
+probability ( weather_factor | recent_snow, temperature, wind_load ) {
+  // ── low wind (baseline) ─────────────────────────────────────────────────
+  (light,    cold,    low)      0.850, 0.120, 0.030;
+  (light,    moderate,low)      0.750, 0.200, 0.050;
+  (light,    warming, low)      0.500, 0.380, 0.120;
+  (moderate, cold,    low)      0.400, 0.450, 0.150;
+  (moderate, moderate,low)      0.250, 0.450, 0.300;
+  (moderate, warming, low)      0.100, 0.300, 0.600;
+  (heavy,    cold,    low)      0.150, 0.350, 0.500;
+  (heavy,    moderate,low)      0.080, 0.270, 0.650;
+  (heavy,    warming, low)      0.030, 0.120, 0.850;
+  // ── moderate wind (~20 % increase in P(dangerous)) ──────────────────────
+  (light,    cold,    moderate) 0.720, 0.220, 0.060;
+  (light,    moderate,moderate) 0.600, 0.300, 0.100;
+  (light,    warming, moderate) 0.360, 0.440, 0.200;
+  (moderate, cold,    moderate) 0.280, 0.470, 0.250;
+  (moderate, moderate,moderate) 0.150, 0.430, 0.420;
+  (moderate, warming, moderate) 0.060, 0.260, 0.680;
+  (heavy,    cold,    moderate) 0.090, 0.340, 0.570;
+  (heavy,    moderate,moderate) 0.040, 0.220, 0.740;
+  (heavy,    warming, moderate) 0.020, 0.080, 0.900;
+  // ── high wind (strong slab risk) ────────────────────────────────────────
+  (light,    cold,    high)     0.550, 0.320, 0.130;
+  (light,    moderate,high)     0.400, 0.400, 0.200;
+  (light,    warming, high)     0.200, 0.480, 0.320;
+  (moderate, cold,    high)     0.160, 0.440, 0.400;
+  (moderate, moderate,high)     0.080, 0.350, 0.570;
+  (moderate, warming, high)     0.030, 0.180, 0.790;
+  (heavy,    cold,    high)     0.040, 0.250, 0.710;
+  (heavy,    moderate,high)     0.020, 0.140, 0.840;
+  (heavy,    warming, high)     0.010, 0.050, 0.940;
 }
 
 // ── P(avalanche_risk | terrain_factor, weather_factor) ───────────────────────
