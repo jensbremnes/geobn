@@ -82,7 +82,7 @@ bn.set_grid("EPSG:4326", resolution=0.005, extent=(19.8, 69.35, 21.0, 69.75))
 Attach a `DataSource` to each evidence node. Sources can be remote services, local files, derived arrays, or plain scalars — they are all reprojected and aligned to a common grid at inference time.
 
 ```python
-# WCSSource — fetch the DEM once; derive all terrain inputs from it
+# WCSSource — fetch data (e.g., terrain) from WVS server
 dtm = geobn.WCSSource(
     url="https://hoydedata.no/arcgis/services/las_dtm_somlos/ImageServer/WCSServer",
     layer="las_dtm",
@@ -99,10 +99,10 @@ slope_deg, sun_exposure = my_custom_function(dtm_array)
 bn.set_input("slope_angle",  geobn.ArraySource(slope_deg))
 bn.set_input("sun_exposure", geobn.ArraySource(sun_exposure))
 
-# RasterSource — local GIS land-cover file
+# RasterSource — Reads local GeoTIFF from disk
 bn.set_input("forest_cover", geobn.RasterSource("forest_cover.tif"))
 
-# URLSource — remote Cloud-Optimised GeoTIFF; e.g. a satellite snow-depth product
+# URLSource — remote Cloud-Optimised GeoTIFF
 bn.set_input("recent_snow", geobn.URLSource("https://example.com/recent_snow.tif"))
 
 # PointGridSource — sample any fn(lat, lon) -> float over the bounding box
