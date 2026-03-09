@@ -3,7 +3,7 @@
 ## Dev setup
 
 ```bash
-git clone https://github.com/jensebr/geobn.git
+git clone https://github.com/jensbremnes/geobn.git
 cd geobn
 uv pip install -e ".[dev]"
 ```

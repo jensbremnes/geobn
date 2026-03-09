@@ -5,7 +5,7 @@ Bug reports, new data sources, documentation fixes, and feature ideas are all we
 ## Setup
 
 ```bash
-git clone https://github.com/jensebr/geobn.git
+git clone https://github.com/jensbremnes/geobn.git
 cd geobn
 uv pip install -e ".[dev]"
 uv run pytest tests/ -v
