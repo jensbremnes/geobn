@@ -39,9 +39,7 @@ Bayesian network (avalanche_risk.bif)
 Outputs (examples/lyngen_alps/output/)
 ---------------------------------------
     map.html            — interactive Leaflet map (pan/zoom, layer switcher)
-                          (requires folium: pip install geobn[viz])
     avalanche_risk.tif  — 3-band GeoTIFF: P(low), P(high), entropy
-                          (requires rasterio: pip install geobn[io])
 
 Run
 ---
@@ -290,30 +288,22 @@ def main() -> None:
     print(f"  Gentle S-facing slopes (<25°, S-facing) : P(high) = {p_high_gentle_south:.2f}")
 
     # ── 8. Interactive map ─────────────────────────────────────────────────
-    try:
-        html_path = result.show_map(
-            OUT_DIR,
-            extra_layers={
-                "Slope angle (°)": slope_deg,
-                "Sun exposure": sun_exposure,
-                "Forest cover": forest_cover,
-            },
-        )
-        print(f"\nInteractive map opened in browser → {html_path}")
-        print("  Use the layer control (top-right) to switch overlays.")
-    except ImportError as exc:
-        print(f"\nSkipping interactive map ({exc})")
-        print("  Install folium: pip install geobn[viz]")
+    html_path = result.show_map(
+        OUT_DIR,
+        extra_layers={
+            "Slope angle (°)": slope_deg,
+            "Sun exposure": sun_exposure,
+            "Forest cover": forest_cover,
+        },
+    )
+    print(f"\nInteractive map opened in browser → {html_path}")
+    print("  Use the layer control (top-right) to switch overlays.")
 
     # ── 9. Export GeoTIFF ─────────────────────────────────────────────────
-    try:
-        result.to_geotiff(OUT_DIR)
-        tif_path = OUT_DIR / "avalanche_risk.tif"
-        print(f"GeoTIFF written → {tif_path}")
-        print("  Band 1: P(low)   Band 2: P(high)   Band 3: entropy")
-    except ImportError as exc:
-        print(f"\nSkipping GeoTIFF export ({exc})")
-        print("  Install rasterio: pip install geobn[io]")
+    result.to_geotiff(OUT_DIR)
+    tif_path = OUT_DIR / "avalanche_risk.tif"
+    print(f"GeoTIFF written → {tif_path}")
+    print("  Band 1: P(low)   Band 2: P(high)   Band 3: entropy")
 
 
 if __name__ == "__main__":
