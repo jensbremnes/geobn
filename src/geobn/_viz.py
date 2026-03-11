@@ -37,7 +37,7 @@ def _array_to_png_url(
     """
     import matplotlib.pyplot as plt
 
-    safe_range = vmax - vmin if vmax != vmin else 1.0
+    safe_range = vmax - vmin if (not np.isnan(vmin) and vmax != vmin) else 1.0
     norm = np.clip((arr - vmin) / safe_range, 0.0, 1.0)
     cmap = plt.get_cmap(cmap_name)
     rgba = cmap(norm).astype(np.float64)  # (H, W, 4)

@@ -126,6 +126,8 @@ class InferenceResult:
 
         """
 
+        if not self.probabilities:
+            raise ValueError("InferenceResult has no probability data")
         H, W = next(iter(self.probabilities.values())).shape[:2]
         transform = self.transform
 

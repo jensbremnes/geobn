@@ -1,7 +1,7 @@
 # geobn
 
-[![Tests](https://github.com/jensbremnes/geobn/actions/workflows/tests.yml/badge.svg)](https://github.com/jensbremnes/geobn/actions/workflows/tests.yml)
-[![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
+[![Tests](https://github.com/jensebr/geobn/actions/workflows/tests.yml/badge.svg)](https://github.com/jensebr/geobn/actions/workflows/tests.yml)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
@@ -16,22 +16,20 @@ Bayesian network inference over geospatial data.
 This is achieved by wiring different data sources — rasters, remote APIs, or plain scalars — directly into a Bayesian network, and run pixel-wise inference, producing posterior probability maps and entropy rasters. Under the hood it groups pixels by unique evidence combinations, so each inference query is solved once per combination instead of once per pixel, keeping computations of large areas computationally tractable. Static sources can be disk-cached to avoid redundant network fetches, and `bn.precompute()` can pre-solve all evidence combinations into a lookup table, reducing repeated inference calls to pure array indexing.
 
 Full docs (API reference, concepts, examples) are hosted at:
-**https://jensbremnes.github.io/geobn**
+**https://jensebr.github.io/geobn**
 
 ---
 
 ## Install
 
-> **PyPI release coming soon.** Until then, install directly from source (Python ≥ 3.13 required):
-
 ```bash
-uv pip install git+https://github.com/jensbremnes/geobn.git
+pip install geobn
 ```
 
 To also run the bundled examples, clone the repo instead:
 
 ```bash
-git clone https://github.com/jensbremnes/geobn.git
+git clone https://github.com/jensebr/geobn.git
 cd geobn
 uv pip install -e ".[dev]"
 ```

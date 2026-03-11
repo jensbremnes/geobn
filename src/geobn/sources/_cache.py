@@ -41,7 +41,7 @@ def _load_cached(cache_path: Path) -> RasterData | None:
         transform = Affine(*raw) if raw is not None else None
         _log.info("Cache hit: %s", cache_path.name)
         return RasterData(array=array, crs=meta["crs"], transform=transform)
-    except Exception:
+    except (OSError, ValueError, KeyError):
         _log.warning("Corrupt cache at %s — will re-fetch", cache_path)
         return None
 

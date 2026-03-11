@@ -9,6 +9,7 @@ from typing import Any
 _log = logging.getLogger(__name__)
 
 import numpy as np
+from pgmpy.models import DiscreteBayesianNetwork
 
 from .discretize import DiscretizationSpec, discretize_array
 from .grid import GridSpec, align_to_grid
@@ -48,13 +49,17 @@ class GeoBayesianNetwork:
         result = bn.infer(query=["avalanche_risk"])  # O(H×W) numpy indexing, no pgmpy
     """
 
-    def __init__(self, model: Any) -> None:
+    def __init__(self, model: DiscreteBayesianNetwork) -> None:
         """
         Parameters
         ----------
         model:
-            A fitted ``pgmpy.models.BayesianNetwork``.
+            A fitted ``pgmpy.models.DiscreteBayesianNetwork``.
         """
+        if not isinstance(model, DiscreteBayesianNetwork):
+            raise TypeError(
+                f"Expected DiscreteBayesianNetwork, got {type(model).__name__}"
+            )
         self._model = model
         self._inputs: dict[str, DataSource] = {}
         self._discretizations: dict[str, DiscretizationSpec] = {}

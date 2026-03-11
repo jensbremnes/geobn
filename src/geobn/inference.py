@@ -24,12 +24,13 @@ import logging
 
 import numpy as np
 from pgmpy.inference import VariableElimination
+from pgmpy.models import DiscreteBayesianNetwork
 
 _log = logging.getLogger(__name__)
 
 
 def run_inference(
-    model,
+    model: DiscreteBayesianNetwork,
     evidence_state_grids: dict[str, np.ndarray],
     evidence_state_names: dict[str, list[str]],
     query_nodes: list[str],
