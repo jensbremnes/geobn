@@ -1,8 +1,8 @@
 site_name: geobn
-site_url: https://jensebr.github.io/geobn
+site_url: https://jensbremnes.github.io/geobn
 site_description: Pixel-wise Bayesian network inference over geospatial data
-repo_url: https://github.com/jensebr/geobn
-repo_name: jensebr/geobn
+repo_url: https://github.com/jensbremnes/geobn
+repo_name: jensbremnes/geobn
 
 theme:
   name: material

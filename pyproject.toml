@@ -39,9 +39,9 @@ docs  = ["mkdocs>=1.6,<2.0", "mkdocs-material>=9.5,<10.0", "mkdocstrings[python]
 dev   = ["pytest>=8.0", "pytest-cov>=5.0"]
 
 [project.urls]
-Homepage = "https://jensebr.github.io/geobn"
-Repository = "https://github.com/jensebr/geobn"
-"Bug Tracker" = "https://github.com/jensebr/geobn/issues"
+Homepage = "https://jensbremnes.github.io/geobn"
+Repository = "https://github.com/jensbremnes/geobn"
+"Bug Tracker" = "https://github.com/jensbremnes/geobn/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/geobn"]
