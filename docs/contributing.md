@@ -5,7 +5,7 @@
 ```bash
 git clone https://github.com/jensbremnes/geobn.git
 cd geobn
-uv pip install -e ".[dev]"
+pip install -e ".[dev]"
 ```
 
 The `dev` extra adds pytest to the standard install.
@@ -13,7 +13,7 @@ The `dev` extra adds pytest to the standard install.
 ## Running tests
 
 ```bash
-uv run pytest tests/ -v
+pytest tests/ -v
 ```
 
 All 101 tests must pass before committing. Tests are fully offline — no real network
@@ -43,7 +43,7 @@ If the source requires credentials, validate them in `__init__()` before `fetch(
 ## Building docs locally
 
 ```bash
-uv pip install -e ".[docs]"
+pip install -e ".[docs]"
 mkdocs serve
 # Browse at http://127.0.0.1:8000
 ```
@@ -70,6 +70,6 @@ git push origin main
 Rules:
 - Stage only relevant files (never `git add -A` blindly)
 - Write concise, present-tense commit messages: `"add WCSSource"`, `"fix nodata sentinel"`
-- Always run `uv run pytest tests/ -v` before committing
+- Always run `pytest tests/ -v` before committing
 
 GitHub Actions deploys docs automatically on push to `main`.

@@ -121,7 +121,7 @@ result.to_geotiff(OUT_DIR)
 ## How to run
 
 ```bash
-uv run python examples/lyngen_alps/run_example.py
+python examples/lyngen_alps/run_example.py
 ```
 
 ## Exploring weather scenarios

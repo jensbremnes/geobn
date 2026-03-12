@@ -29,7 +29,7 @@ To also run the bundled examples, clone the repo instead:
 ```bash
 git clone https://github.com/jensbremnes/geobn.git
 cd geobn
-uv pip install -e ".[dev]"
+pip install -e ".[dev]"
 ```
 
 ---
@@ -206,7 +206,7 @@ result = bn.infer(query=["avalanche_risk"])  # O(H×W) array indexing — no pgm
 Run from the repo root:
 
 ```bash
-uv run python examples/lyngen_alps/run_example.py
+python examples/lyngen_alps/run_example.py
 ```
 
 ---
