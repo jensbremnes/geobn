@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import itertools
+import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -73,8 +74,8 @@ class GeoBayesianNetwork:
         self._cached_ve: Any | None = None               # VariableElimination instance
         # Tier 2 — precomputed inference table
         self._inference_table: dict[str, np.ndarray] = {}
-        self._table_node_order: list[str] = []
-        self._table_query_nodes: list[str] = []
+        self._evidence_nodes: list[str] = []
+        self._query_nodes: list[str] = []
 
     # ------------------------------------------------------------------
     # Configuration
@@ -96,8 +97,8 @@ class GeoBayesianNetwork:
         # If this node was frozen and cached, the cached array is now stale
         if self._frozen_cache.pop(node, None) is not None:
             self._inference_table.clear()
-            self._table_node_order = []
-            self._table_query_nodes = []
+            self._evidence_nodes = []
+            self._query_nodes = []
         _log.info("Input: '%s' ← %s", node, type(source).__name__)
 
     def set_discretization(
@@ -133,8 +134,8 @@ class GeoBayesianNetwork:
         # If this node was frozen and cached, the cached array used the old spec
         if self._frozen_cache.pop(node, None) is not None:
             self._inference_table.clear()
-            self._table_node_order = []
-            self._table_query_nodes = []
+            self._evidence_nodes = []
+            self._query_nodes = []
         _log.info("Discretization: '%s' → %d bins %s", node, len(labels), labels)
 
     def set_grid(
@@ -158,8 +159,8 @@ class GeoBayesianNetwork:
         self._cached_ref_grid = None
         self._frozen_cache.clear()
         self._inference_table.clear()
-        self._table_node_order = []
-        self._table_query_nodes = []
+        self._evidence_nodes = []
+        self._query_nodes = []
         H, W = self._grid.shape
         _log.info("Grid set: %s, resolution=%g, shape=%d×%d", crs, resolution, H, W)
 
@@ -232,8 +233,8 @@ class GeoBayesianNetwork:
         self._cached_ref_grid = None
         self._cached_ve = None
         self._inference_table.clear()
-        self._table_node_order = []
-        self._table_query_nodes = []
+        self._evidence_nodes = []
+        self._query_nodes = []
         _log.debug("Cache cleared")
 
     def precompute(self, query: list[str]) -> None:
@@ -304,9 +305,129 @@ class GeoBayesianNetwork:
                 tables[qnode][idx_combo] = factor.values.astype(np.float32)
 
         self._inference_table = tables
-        self._table_node_order = node_order
-        self._table_query_nodes = list(query)
+        self._evidence_nodes = node_order
+        self._query_nodes = list(query)
         _log.info("Precompute done.  Table shape: %s", next(iter(tables.values())).shape)
+
+    def save_precomputed(self, path: str | Path) -> None:
+        """Serialize the precomputed lookup table to a portable ``.npz`` file.
+
+        The file can be loaded on any machine with
+        :meth:`load_precomputed` — no pgmpy is required at load time.
+
+        Parameters
+        ----------
+        path:
+            Destination path.  A ``.npz`` extension is appended automatically
+            if not already present (numpy behaviour).
+
+        Raises
+        ------
+        RuntimeError
+            If :meth:`precompute` has not been called yet.
+        """
+        if not self._inference_table:
+            raise RuntimeError(
+                "No precomputed table. Call precompute() first."
+            )
+        # __metadata__ encodes which nodes form the table axes and which are
+        # query outputs.  Example for a BN with slope + rainfall → fire_risk:
+        #   {
+        #       "evidence_nodes": ["slope", "rainfall"],  # input axes of the table
+        #       "query_nodes":    ["fire_risk"]           # stored posteriors
+        #   }
+        # The "fire_risk" array then has shape (n_slope_states, n_rainfall_states,
+        # n_fire_risk_states), e.g. (3, 3, 3).
+        metadata = {
+            "evidence_nodes": self._evidence_nodes,
+            "query_nodes": self._query_nodes,
+        }
+        arrays = dict(self._inference_table)
+        arrays["__metadata__"] = np.array([json.dumps(metadata)])
+        np.savez_compressed(path, **arrays)
+        _log.info("Saved precomputed table to '%s'", path)
+
+    def load_precomputed(self, path: str | Path) -> None:
+        """Load a precomputed lookup table saved with :meth:`save_precomputed`.
+
+        After loading, :meth:`infer` uses the table path (O(H×W) numpy
+        indexing) without calling pgmpy.
+
+        Parameters
+        ----------
+        path:
+            Path to the ``.npz`` file written by :meth:`save_precomputed`.
+
+        Raises
+        ------
+        FileNotFoundError
+            If neither *path* nor *path* + ``.npz`` exists.
+        ValueError
+            If the table's node order, query nodes, or array shapes do not
+            match the current BN configuration.
+        """
+        path = Path(path)
+        if not path.exists():
+            npz_path = path.with_suffix(".npz")
+            if npz_path.exists():
+                path = npz_path
+            else:
+                raise FileNotFoundError(
+                    f"Precomputed table file not found: '{path}'"
+                )
+
+        data = np.load(path, allow_pickle=False)
+
+        if "__metadata__" not in data:
+            raise ValueError(
+                f"File '{path}' is missing the '__metadata__' key.  "
+                "Was it saved with save_precomputed()?"
+            )
+        metadata = json.loads(str(data["__metadata__"][0]))
+        node_order: list[str] = metadata["evidence_nodes"]
+        query_nodes: list[str] = metadata["query_nodes"]
+
+        # Validate node order matches current inputs
+        current_order = list(self._inputs.keys())
+        if node_order != current_order:
+            raise ValueError(
+                f"Node order mismatch: table has {node_order}, "
+                f"current inputs are {current_order}.  "
+                "Re-register inputs in the same order or re-run precompute()."
+            )
+
+        # Validate every query node exists in the BN
+        for n in query_nodes:
+            self._validate_node_exists(n)
+
+        # Validate array shapes match current discretizations
+        expected_n_states = [
+            len(self._discretizations[n].labels) for n in node_order
+        ]
+        for qnode in query_nodes:
+            if qnode not in data:
+                raise ValueError(
+                    f"Query node '{qnode}' not found in the file.  "
+                    "The file may be corrupt or from an incompatible save."
+                )
+            arr = data[qnode]
+            actual = list(arr.shape[:-1])
+            if actual != expected_n_states:
+                raise ValueError(
+                    f"Shape mismatch for '{qnode}': table evidence axes {actual} "
+                    f"do not match current discretization n_states {expected_n_states}.  "
+                    "Ensure discretization specs match those used when the table was saved."
+                )
+
+        self._inference_table = {
+            qnode: np.array(data[qnode], dtype=np.float32) for qnode in query_nodes
+        }
+        self._evidence_nodes = node_order
+        self._query_nodes = query_nodes
+        _log.info(
+            "Loaded precomputed table from '%s': query=%s, evidence=%s",
+            path, query_nodes, node_order,
+        )
 
     # ------------------------------------------------------------------
     # Inference
@@ -436,14 +557,14 @@ class GeoBayesianNetwork:
         # ── 5. Run inference ───────────────────────────────────────────
         if (
             self._inference_table
-            and sorted(query) == sorted(self._table_query_nodes)
-            and list(self._inputs.keys()) == self._table_node_order
+            and sorted(query) == sorted(self._query_nodes)
+            and list(self._inputs.keys()) == self._evidence_nodes
         ):
             # Tier-2 fast path: pure numpy table lookup, no pgmpy per call
             _log.info("Using precomputed table (zero pgmpy calls)")
             probabilities = run_inference_from_table(
                 table=self._inference_table,
-                node_order=self._table_node_order,
+                node_order=self._evidence_nodes,
                 evidence_state_grids=evidence_state_grids,
                 nodata_mask=nodata_mask,
             )

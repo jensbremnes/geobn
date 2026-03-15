@@ -20,6 +20,8 @@ sources to evidence nodes, configure discretization, and call `infer()`.
         - set_grid
         - freeze
         - precompute
+        - save_precomputed
+        - load_precomputed
         - clear_cache
         - infer
 

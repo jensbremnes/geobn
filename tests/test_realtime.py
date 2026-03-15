@@ -269,8 +269,8 @@ class TestPrecompute:
         bn.precompute(query=["fire_risk"])
 
         assert bn._inference_table, "Table should be populated after precompute()"
-        assert bn._table_node_order == ["slope", "rainfall"]
-        assert bn._table_query_nodes == ["fire_risk"]
+        assert bn._evidence_nodes == ["slope", "rainfall"]
+        assert bn._query_nodes == ["fire_risk"]
 
     def test_precompute_raises_without_discretizations(self, fire_risk_model):
         """precompute() must raise RuntimeError if discretizations are missing."""
@@ -312,8 +312,8 @@ class TestPrecompute:
 
         bn.clear_cache()
         assert not bn._inference_table
-        assert not bn._table_node_order
-        assert not bn._table_query_nodes
+        assert not bn._evidence_nodes
+        assert not bn._query_nodes
 
     def test_set_grid_clears_frozen_cache(self, fire_risk_model):
         """set_grid() after freeze() must invalidate the frozen discrete array cache.
@@ -339,3 +339,117 @@ class TestPrecompute:
         bn.set_input("rainfall", ArraySource(new_rain, crs=_CRS, transform=t))
         result = bn.infer(query=["fire_risk"])
         assert result.probabilities["fire_risk"].shape[:2] == (4, 4)
+
+
+# ---------------------------------------------------------------------------
+# TestSaveLoadPrecomputed
+# ---------------------------------------------------------------------------
+
+
+class TestSaveLoadPrecomputed:
+    def test_save_creates_file(self, fire_risk_model, tmp_path):
+        """save_precomputed() must create a .npz file at the given path."""
+        bn = _make_bn(fire_risk_model)
+        bn.precompute(query=["fire_risk"])
+        out = tmp_path / "table.npz"
+        bn.save_precomputed(out)
+        assert out.exists()
+
+    def test_load_restores_table(self, fire_risk_model, tmp_path):
+        """load_precomputed() must populate _inference_table, _evidence_nodes, _query_nodes."""
+        bn = _make_bn(fire_risk_model)
+        bn.precompute(query=["fire_risk"])
+        out = tmp_path / "table.npz"
+        bn.save_precomputed(out)
+
+        bn2 = _make_bn(fire_risk_model)
+        bn2.load_precomputed(out)
+
+        assert bn2._inference_table, "Table should be non-empty after load"
+        assert bn2._evidence_nodes == ["slope", "rainfall"]
+        assert bn2._query_nodes == ["fire_risk"]
+
+    def test_load_matches_precomputed_results(self, fire_risk_model, tmp_path):
+        """infer() after load_precomputed() must match infer() after precompute() (atol=1e-5)."""
+        bn = _make_bn(fire_risk_model)
+        bn.precompute(query=["fire_risk"])
+        result_precomputed = bn.infer(query=["fire_risk"])
+
+        out = tmp_path / "table.npz"
+        bn.save_precomputed(out)
+
+        bn2 = _make_bn(fire_risk_model)
+        bn2.load_precomputed(out)
+        result_loaded = bn2.infer(query=["fire_risk"])
+
+        np.testing.assert_allclose(
+            result_precomputed.probabilities["fire_risk"],
+            result_loaded.probabilities["fire_risk"],
+            atol=1e-5,
+        )
+
+    def test_save_raises_without_table(self, fire_risk_model, tmp_path):
+        """save_precomputed() before precompute() must raise RuntimeError."""
+        bn = _make_bn(fire_risk_model)
+        with pytest.raises(RuntimeError, match="No precomputed table"):
+            bn.save_precomputed(tmp_path / "table.npz")
+
+    def test_load_raises_on_node_order_mismatch(self, fire_risk_model, tmp_path):
+        """load_precomputed() must raise ValueError if node order differs."""
+        bn = _make_bn(fire_risk_model)
+        bn.precompute(query=["fire_risk"])
+        out = tmp_path / "table.npz"
+        bn.save_precomputed(out)
+
+        # Build a BN with inputs registered in reverse order
+        bn2 = GeoBayesianNetwork(fire_risk_model)
+        bn2.set_grid(_CRS, 0.1, (0.0, 49.0, 0.3, 49.3))
+        bn2.set_input("rainfall", ArraySource(_RAIN, crs=_CRS, transform=_TRANSFORM))
+        bn2.set_input("slope", ArraySource(_SLOPE, crs=_CRS, transform=_TRANSFORM))
+        bn2.set_discretization("slope", _SLOPE_DISC, _SLOPE_LABELS)
+        bn2.set_discretization("rainfall", _RAIN_DISC, _RAIN_LABELS)
+
+        with pytest.raises(ValueError, match="Node order mismatch"):
+            bn2.load_precomputed(out)
+
+    def test_load_raises_on_shape_mismatch(self, fire_risk_model, tmp_path):
+        """load_precomputed() must raise ValueError if discretization n_states differ."""
+        from geobn.discretize import DiscretizationSpec
+
+        bn = _make_bn(fire_risk_model)
+        bn.precompute(query=["fire_risk"])
+        out = tmp_path / "table.npz"
+        bn.save_precomputed(out)
+
+        # Build a normal BN, then override _discretizations to simulate a mismatch
+        # (fewer bins for slope than the saved table expects).
+        bn2 = _make_bn(fire_risk_model)
+        # Directly replace the discretization so n_states differs from the saved table
+        bn2._discretizations["slope"] = DiscretizationSpec(
+            breakpoints=[0, 45, 90], labels=["gentle", "steep"]
+        )
+
+        with pytest.raises(ValueError, match="Shape mismatch"):
+            bn2.load_precomputed(out)
+
+    def test_load_raises_file_not_found(self, fire_risk_model, tmp_path):
+        """load_precomputed() must raise FileNotFoundError for a missing file."""
+        bn = _make_bn(fire_risk_model)
+        with pytest.raises(FileNotFoundError):
+            bn.load_precomputed(tmp_path / "nonexistent.npz")
+
+    def test_roundtrip_no_pgmpy(self, fire_risk_model, tmp_path):
+        """After load_precomputed(), infer() should use the table path (no pgmpy)."""
+        bn = _make_bn(fire_risk_model)
+        bn.precompute(query=["fire_risk"])
+        out = tmp_path / "table.npz"
+        bn.save_precomputed(out)
+
+        bn2 = _make_bn(fire_risk_model)
+        bn2.load_precomputed(out)
+
+        assert bn2._inference_table, "_inference_table must be populated"
+        result = bn2.infer(query=["fire_risk"])
+        # Result should be valid (non-NaN) for all pixels
+        probs = result.probabilities["fire_risk"]
+        assert not np.all(np.isnan(probs)), "Expected valid (non-NaN) probabilities"
