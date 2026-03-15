@@ -69,6 +69,50 @@ to look up the pre-filled probability table.
 
 ---
 
+## Offline persistence — save and load the table
+
+For robotics and edge-deployment workflows where pgmpy must not run at deploy
+time, you can build the lookup table on a workstation and ship only the numpy
+archive:
+
+**Offline (workstation):**
+
+```python
+import geobn
+
+bn = geobn.load("model.bif")
+bn.set_input("slope", geobn.RasterSource("slope.tif"))
+bn.set_input("rainfall", geobn.ConstantSource(50.0))
+bn.set_discretization("slope", [0, 10, 30, 90], ["flat", "moderate", "steep"])
+bn.set_discretization("rainfall", [0, 25, 75, 200], ["low", "medium", "high"])
+
+bn.precompute(query=["fire_risk"])          # one-time cost: all state combos
+bn.save_precomputed("fire_risk_table.npz")  # portable .npz — ship this file
+```
+
+**Runtime (robot / edge device):**
+
+```python
+import geobn
+
+bn = geobn.load("model.bif")
+bn.set_input("slope", geobn.RasterSource("slope.tif"))
+bn.set_input("rainfall", geobn.ConstantSource(50.0))
+bn.set_discretization("slope", [0, 10, 30, 90], ["flat", "moderate", "steep"])
+bn.set_discretization("rainfall", [0, 25, 75, 200], ["low", "medium", "high"])
+
+bn.load_precomputed("fire_risk_table.npz")  # no pgmpy inference — loads numpy archive
+result = bn.infer(query=["fire_risk"])       # O(H×W) table lookup, zero pgmpy calls
+```
+
+!!! note
+    `load_precomputed()` validates that the file's node order and array shapes
+    match the current BN and discretization configuration.  A `ValueError` is
+    raised if there is a mismatch; a `FileNotFoundError` is raised if the file
+    does not exist.
+
+---
+
 ## Combining both tiers
 
 The tiers stack naturally:
@@ -101,4 +145,6 @@ See the full method signatures in the [GeoBayesianNetwork](network.md) reference
 
 - [`freeze(*node_names)`][geobn.GeoBayesianNetwork.freeze]
 - [`precompute(query)`][geobn.GeoBayesianNetwork.precompute]
+- [`save_precomputed(path)`][geobn.GeoBayesianNetwork.save_precomputed]
+- [`load_precomputed(path)`][geobn.GeoBayesianNetwork.load_precomputed]
 - [`clear_cache()`][geobn.GeoBayesianNetwork.clear_cache]

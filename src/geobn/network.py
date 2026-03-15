@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import itertools
+import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -307,6 +308,118 @@ class GeoBayesianNetwork:
         self._table_node_order = node_order
         self._table_query_nodes = list(query)
         _log.info("Precompute done.  Table shape: %s", next(iter(tables.values())).shape)
+
+    def save_precomputed(self, path: str | Path) -> None:
+        """Serialize the precomputed lookup table to a portable ``.npz`` file.
+
+        The file can be loaded on any machine with
+        :meth:`load_precomputed` — no pgmpy is required at load time.
+
+        Parameters
+        ----------
+        path:
+            Destination path.  A ``.npz`` extension is appended automatically
+            if not already present (numpy behaviour).
+
+        Raises
+        ------
+        RuntimeError
+            If :meth:`precompute` has not been called yet.
+        """
+        if not self._inference_table:
+            raise RuntimeError(
+                "No precomputed table. Call precompute() first."
+            )
+        metadata = {
+            "table_node_order": self._table_node_order,
+            "table_query_nodes": self._table_query_nodes,
+        }
+        arrays = dict(self._inference_table)
+        arrays["__metadata__"] = np.array([json.dumps(metadata)])
+        np.savez_compressed(path, **arrays)
+        _log.info("Saved precomputed table to '%s'", path)
+
+    def load_precomputed(self, path: str | Path) -> None:
+        """Load a precomputed lookup table saved with :meth:`save_precomputed`.
+
+        After loading, :meth:`infer` uses the table path (O(H×W) numpy
+        indexing) without calling pgmpy.
+
+        Parameters
+        ----------
+        path:
+            Path to the ``.npz`` file written by :meth:`save_precomputed`.
+
+        Raises
+        ------
+        FileNotFoundError
+            If neither *path* nor *path* + ``.npz`` exists.
+        ValueError
+            If the table's node order, query nodes, or array shapes do not
+            match the current BN configuration.
+        """
+        path = Path(path)
+        if not path.exists():
+            npz_path = path.with_suffix(".npz")
+            if npz_path.exists():
+                path = npz_path
+            else:
+                raise FileNotFoundError(
+                    f"Precomputed table file not found: '{path}'"
+                )
+
+        data = np.load(path, allow_pickle=False)
+
+        if "__metadata__" not in data:
+            raise ValueError(
+                f"File '{path}' is missing the '__metadata__' key.  "
+                "Was it saved with save_precomputed()?"
+            )
+        metadata = json.loads(str(data["__metadata__"][0]))
+        node_order: list[str] = metadata["table_node_order"]
+        query_nodes: list[str] = metadata["table_query_nodes"]
+
+        # Validate node order matches current inputs
+        current_order = list(self._inputs.keys())
+        if node_order != current_order:
+            raise ValueError(
+                f"Node order mismatch: table has {node_order}, "
+                f"current inputs are {current_order}.  "
+                "Re-register inputs in the same order or re-run precompute()."
+            )
+
+        # Validate every query node exists in the BN
+        for n in query_nodes:
+            self._validate_node_exists(n)
+
+        # Validate array shapes match current discretizations
+        expected_n_states = [
+            len(self._discretizations[n].labels) for n in node_order
+        ]
+        for qnode in query_nodes:
+            if qnode not in data:
+                raise ValueError(
+                    f"Query node '{qnode}' not found in the file.  "
+                    "The file may be corrupt or from an incompatible save."
+                )
+            arr = data[qnode]
+            actual = list(arr.shape[:-1])
+            if actual != expected_n_states:
+                raise ValueError(
+                    f"Shape mismatch for '{qnode}': table evidence axes {actual} "
+                    f"do not match current discretization n_states {expected_n_states}.  "
+                    "Ensure discretization specs match those used when the table was saved."
+                )
+
+        self._inference_table = {
+            qnode: np.array(data[qnode], dtype=np.float32) for qnode in query_nodes
+        }
+        self._table_node_order = node_order
+        self._table_query_nodes = query_nodes
+        _log.info(
+            "Loaded precomputed table from '%s': query=%s, node_order=%s",
+            path, query_nodes, node_order,
+        )
 
     # ------------------------------------------------------------------
     # Inference
