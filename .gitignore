@@ -16,3 +16,4 @@ site/
 *.DS_Store
 CLAUDE.md
 .claude/
+examples/tautra

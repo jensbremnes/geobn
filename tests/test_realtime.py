@@ -272,16 +272,16 @@ class TestPrecompute:
         assert bn._evidence_nodes == ["slope", "rainfall"]
         assert bn._query_nodes == ["fire_risk"]
 
-    def test_precompute_raises_without_discretizations(self, fire_risk_model):
-        """precompute() must raise RuntimeError if discretizations are missing."""
+    def test_precompute_works_without_discretizations(self, fire_risk_model):
+        """precompute() should succeed without set_discretization(), using CPD state names."""
         bn = GeoBayesianNetwork(fire_risk_model)
         bn.set_grid(_CRS, 0.1, (0.0, 49.0, 0.3, 49.3))
         bn.set_input("slope", ArraySource(_SLOPE, crs=_CRS, transform=_TRANSFORM))
         bn.set_input("rainfall", ArraySource(_RAIN, crs=_CRS, transform=_TRANSFORM))
         # intentionally skip set_discretization()
 
-        with pytest.raises(RuntimeError, match="No discretization"):
-            bn.precompute(query=["fire_risk"])
+        bn.precompute(query=["fire_risk"])
+        assert bn._inference_table, "Table should be populated without explicit discretizations"
 
     def test_precompute_nodata_propagates(self, fire_risk_model):
         """NaN in input must propagate as NaN in table-path output."""

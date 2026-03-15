@@ -257,22 +257,19 @@ class GeoBayesianNetwork:
 
         Notes
         -----
-        All inputs must have discretizations configured via
-        :meth:`set_discretization` before calling :meth:`precompute`.
+        State names are read directly from the BN's CPDs, so
+        :meth:`set_discretization` is not required before calling
+        :meth:`precompute`.
         """
         for node in query:
             self._validate_node_exists(node)
-        for node in self._inputs:
-            if node not in self._discretizations:
-                raise RuntimeError(
-                    f"No discretization set for '{node}'.  "
-                    f"Call set_discretization() for all inputs before precompute()."
-                )
 
         from pgmpy.inference import VariableElimination  # noqa: PLC0415
 
         node_order = list(self._inputs.keys())
-        state_names_per_node = {n: self._discretizations[n].labels for n in node_order}
+        state_names_per_node = {
+            n: list(self._model.get_cpds(n).state_names[n]) for n in node_order
+        }
         n_states_per_node = [len(state_names_per_node[n]) for n in node_order]
 
         query_state_names: dict[str, list[str]] = {}
