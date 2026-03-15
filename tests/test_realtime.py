@@ -269,8 +269,8 @@ class TestPrecompute:
         bn.precompute(query=["fire_risk"])
 
         assert bn._inference_table, "Table should be populated after precompute()"
-        assert bn._table_node_order == ["slope", "rainfall"]
-        assert bn._table_query_nodes == ["fire_risk"]
+        assert bn._evidence_nodes == ["slope", "rainfall"]
+        assert bn._query_nodes == ["fire_risk"]
 
     def test_precompute_raises_without_discretizations(self, fire_risk_model):
         """precompute() must raise RuntimeError if discretizations are missing."""
@@ -312,8 +312,8 @@ class TestPrecompute:
 
         bn.clear_cache()
         assert not bn._inference_table
-        assert not bn._table_node_order
-        assert not bn._table_query_nodes
+        assert not bn._evidence_nodes
+        assert not bn._query_nodes
 
     def test_set_grid_clears_frozen_cache(self, fire_risk_model):
         """set_grid() after freeze() must invalidate the frozen discrete array cache.
@@ -356,7 +356,7 @@ class TestSaveLoadPrecomputed:
         assert out.exists()
 
     def test_load_restores_table(self, fire_risk_model, tmp_path):
-        """load_precomputed() must populate _inference_table, _table_node_order, _table_query_nodes."""
+        """load_precomputed() must populate _inference_table, _evidence_nodes, _query_nodes."""
         bn = _make_bn(fire_risk_model)
         bn.precompute(query=["fire_risk"])
         out = tmp_path / "table.npz"
@@ -366,8 +366,8 @@ class TestSaveLoadPrecomputed:
         bn2.load_precomputed(out)
 
         assert bn2._inference_table, "Table should be non-empty after load"
-        assert bn2._table_node_order == ["slope", "rainfall"]
-        assert bn2._table_query_nodes == ["fire_risk"]
+        assert bn2._evidence_nodes == ["slope", "rainfall"]
+        assert bn2._query_nodes == ["fire_risk"]
 
     def test_load_matches_precomputed_results(self, fire_risk_model, tmp_path):
         """infer() after load_precomputed() must match infer() after precompute() (atol=1e-5)."""

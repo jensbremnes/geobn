@@ -74,8 +74,8 @@ class GeoBayesianNetwork:
         self._cached_ve: Any | None = None               # VariableElimination instance
         # Tier 2 — precomputed inference table
         self._inference_table: dict[str, np.ndarray] = {}
-        self._table_node_order: list[str] = []
-        self._table_query_nodes: list[str] = []
+        self._evidence_nodes: list[str] = []
+        self._query_nodes: list[str] = []
 
     # ------------------------------------------------------------------
     # Configuration
@@ -97,8 +97,8 @@ class GeoBayesianNetwork:
         # If this node was frozen and cached, the cached array is now stale
         if self._frozen_cache.pop(node, None) is not None:
             self._inference_table.clear()
-            self._table_node_order = []
-            self._table_query_nodes = []
+            self._evidence_nodes = []
+            self._query_nodes = []
         _log.info("Input: '%s' ← %s", node, type(source).__name__)
 
     def set_discretization(
@@ -134,8 +134,8 @@ class GeoBayesianNetwork:
         # If this node was frozen and cached, the cached array used the old spec
         if self._frozen_cache.pop(node, None) is not None:
             self._inference_table.clear()
-            self._table_node_order = []
-            self._table_query_nodes = []
+            self._evidence_nodes = []
+            self._query_nodes = []
         _log.info("Discretization: '%s' → %d bins %s", node, len(labels), labels)
 
     def set_grid(
@@ -159,8 +159,8 @@ class GeoBayesianNetwork:
         self._cached_ref_grid = None
         self._frozen_cache.clear()
         self._inference_table.clear()
-        self._table_node_order = []
-        self._table_query_nodes = []
+        self._evidence_nodes = []
+        self._query_nodes = []
         H, W = self._grid.shape
         _log.info("Grid set: %s, resolution=%g, shape=%d×%d", crs, resolution, H, W)
 
@@ -233,8 +233,8 @@ class GeoBayesianNetwork:
         self._cached_ref_grid = None
         self._cached_ve = None
         self._inference_table.clear()
-        self._table_node_order = []
-        self._table_query_nodes = []
+        self._evidence_nodes = []
+        self._query_nodes = []
         _log.debug("Cache cleared")
 
     def precompute(self, query: list[str]) -> None:
@@ -305,8 +305,8 @@ class GeoBayesianNetwork:
                 tables[qnode][idx_combo] = factor.values.astype(np.float32)
 
         self._inference_table = tables
-        self._table_node_order = node_order
-        self._table_query_nodes = list(query)
+        self._evidence_nodes = node_order
+        self._query_nodes = list(query)
         _log.info("Precompute done.  Table shape: %s", next(iter(tables.values())).shape)
 
     def save_precomputed(self, path: str | Path) -> None:
@@ -330,9 +330,17 @@ class GeoBayesianNetwork:
             raise RuntimeError(
                 "No precomputed table. Call precompute() first."
             )
+        # __metadata__ encodes which nodes form the table axes and which are
+        # query outputs.  Example for a BN with slope + rainfall → fire_risk:
+        #   {
+        #       "evidence_nodes": ["slope", "rainfall"],  # input axes of the table
+        #       "query_nodes":    ["fire_risk"]           # stored posteriors
+        #   }
+        # The "fire_risk" array then has shape (n_slope_states, n_rainfall_states,
+        # n_fire_risk_states), e.g. (3, 3, 3).
         metadata = {
-            "table_node_order": self._table_node_order,
-            "table_query_nodes": self._table_query_nodes,
+            "evidence_nodes": self._evidence_nodes,
+            "query_nodes": self._query_nodes,
         }
         arrays = dict(self._inference_table)
         arrays["__metadata__"] = np.array([json.dumps(metadata)])
@@ -376,8 +384,8 @@ class GeoBayesianNetwork:
                 "Was it saved with save_precomputed()?"
             )
         metadata = json.loads(str(data["__metadata__"][0]))
-        node_order: list[str] = metadata["table_node_order"]
-        query_nodes: list[str] = metadata["table_query_nodes"]
+        node_order: list[str] = metadata["evidence_nodes"]
+        query_nodes: list[str] = metadata["query_nodes"]
 
         # Validate node order matches current inputs
         current_order = list(self._inputs.keys())
@@ -414,10 +422,10 @@ class GeoBayesianNetwork:
         self._inference_table = {
             qnode: np.array(data[qnode], dtype=np.float32) for qnode in query_nodes
         }
-        self._table_node_order = node_order
-        self._table_query_nodes = query_nodes
+        self._evidence_nodes = node_order
+        self._query_nodes = query_nodes
         _log.info(
-            "Loaded precomputed table from '%s': query=%s, node_order=%s",
+            "Loaded precomputed table from '%s': query=%s, evidence=%s",
             path, query_nodes, node_order,
         )
 
@@ -549,14 +557,14 @@ class GeoBayesianNetwork:
         # ── 5. Run inference ───────────────────────────────────────────
         if (
             self._inference_table
-            and sorted(query) == sorted(self._table_query_nodes)
-            and list(self._inputs.keys()) == self._table_node_order
+            and sorted(query) == sorted(self._query_nodes)
+            and list(self._inputs.keys()) == self._evidence_nodes
         ):
             # Tier-2 fast path: pure numpy table lookup, no pgmpy per call
             _log.info("Using precomputed table (zero pgmpy calls)")
             probabilities = run_inference_from_table(
                 table=self._inference_table,
-                node_order=self._table_node_order,
+                node_order=self._evidence_nodes,
                 evidence_state_grids=evidence_state_grids,
                 nodata_mask=nodata_mask,
             )
