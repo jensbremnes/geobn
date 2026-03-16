@@ -1,0 +1,174 @@
+network usv_risk {
+}
+
+variable water_depth {
+  type discrete [ 5 ] { very_shallow, shallow, moderate, deep, very_deep };
+}
+
+variable vessel_traffic {
+  type discrete [ 3 ] { low, medium, high };
+}
+
+variable wave_height {
+  type discrete [ 3 ] { calm, moderate, rough };
+}
+
+variable wind_speed {
+  type discrete [ 3 ] { light, moderate, strong };
+}
+
+variable current_speed {
+  type discrete [ 3 ] { weak, moderate, strong };
+}
+
+variable fog_fraction {
+  type discrete [ 3 ] { clear, patchy, dense };
+}
+
+variable grounding_risk {
+  type discrete [ 3 ] { low, medium, high };
+}
+
+variable collision_risk {
+  type discrete [ 3 ] { low, medium, high };
+}
+
+variable navigation_difficulty {
+  type discrete [ 3 ] { easy, moderate, difficult };
+}
+
+variable usv_risk {
+  type discrete [ 3 ] { low, medium, high };
+}
+
+probability ( water_depth ) {
+  table 0.20000000, 0.20000000, 0.20000000, 0.20000000, 0.20000000;
+}
+
+probability ( vessel_traffic ) {
+  table 0.33300000, 0.33400000, 0.33300000;
+}
+
+probability ( wave_height ) {
+  table 0.33300000, 0.33400000, 0.33300000;
+}
+
+probability ( wind_speed ) {
+  table 0.33300000, 0.33400000, 0.33300000;
+}
+
+probability ( current_speed ) {
+  table 0.33300000, 0.33400000, 0.33300000;
+}
+
+probability ( fog_fraction ) {
+  table 0.33300000, 0.33400000, 0.33300000;
+}
+
+probability ( grounding_risk | water_depth, current_speed ) {
+  (very_shallow, weak)     0.05000000, 0.15000000, 0.80000000;
+  (very_shallow, moderate) 0.03000000, 0.10000000, 0.87000000;
+  (very_shallow, strong)   0.01000000, 0.05000000, 0.94000000;
+  (shallow, weak)          0.25000000, 0.35000000, 0.40000000;
+  (shallow, moderate)      0.12000000, 0.30000000, 0.58000000;
+  (shallow, strong)        0.04000000, 0.18000000, 0.78000000;
+  (moderate, weak)         0.80000000, 0.15000000, 0.05000000;
+  (moderate, moderate)     0.60000000, 0.30000000, 0.10000000;
+  (moderate, strong)       0.35000000, 0.42000000, 0.23000000;
+  (deep, weak)             0.90000000, 0.08000000, 0.02000000;
+  (deep, moderate)         0.82000000, 0.14000000, 0.04000000;
+  (deep, strong)           0.65000000, 0.28000000, 0.07000000;
+  (very_deep, weak)        0.95000000, 0.04000000, 0.01000000;
+  (very_deep, moderate)    0.90000000, 0.08000000, 0.02000000;
+  (very_deep, strong)      0.82000000, 0.14000000, 0.04000000;
+}
+
+probability ( collision_risk | vessel_traffic, wave_height, fog_fraction ) {
+  (low, calm, clear)        0.92000000, 0.06000000, 0.02000000;
+  (low, calm, patchy)       0.75000000, 0.18000000, 0.07000000;
+  (low, calm, dense)        0.50000000, 0.30000000, 0.20000000;
+  (low, moderate, clear)    0.70000000, 0.22000000, 0.08000000;
+  (low, moderate, patchy)   0.50000000, 0.35000000, 0.15000000;
+  (low, moderate, dense)    0.30000000, 0.40000000, 0.30000000;
+  (low, rough, clear)       0.45000000, 0.38000000, 0.17000000;
+  (low, rough, patchy)      0.28000000, 0.42000000, 0.30000000;
+  (low, rough, dense)       0.15000000, 0.38000000, 0.47000000;
+  (medium, calm, clear)     0.70000000, 0.22000000, 0.08000000;
+  (medium, calm, patchy)    0.50000000, 0.35000000, 0.15000000;
+  (medium, calm, dense)     0.28000000, 0.42000000, 0.30000000;
+  (medium, moderate, clear) 0.45000000, 0.38000000, 0.17000000;
+  (medium, moderate, patchy)0.28000000, 0.42000000, 0.30000000;
+  (medium, moderate, dense) 0.12000000, 0.38000000, 0.50000000;
+  (medium, rough, clear)    0.25000000, 0.45000000, 0.30000000;
+  (medium, rough, patchy)   0.15000000, 0.40000000, 0.45000000;
+  (medium, rough, dense)    0.07000000, 0.28000000, 0.65000000;
+  (high, calm, clear)       0.50000000, 0.35000000, 0.15000000;
+  (high, calm, patchy)      0.30000000, 0.42000000, 0.28000000;
+  (high, calm, dense)       0.12000000, 0.38000000, 0.50000000;
+  (high, moderate, clear)   0.25000000, 0.45000000, 0.30000000;
+  (high, moderate, patchy)  0.12000000, 0.38000000, 0.50000000;
+  (high, moderate, dense)   0.05000000, 0.25000000, 0.70000000;
+  (high, rough, clear)      0.10000000, 0.35000000, 0.55000000;
+  (high, rough, patchy)     0.05000000, 0.25000000, 0.70000000;
+  (high, rough, dense)      0.02000000, 0.10000000, 0.88000000;
+}
+
+probability ( navigation_difficulty | wave_height, wind_speed, current_speed ) {
+  (calm, light, weak)        0.92000000, 0.07000000, 0.01000000;
+  (calm, light, moderate)    0.75000000, 0.20000000, 0.05000000;
+  (calm, light, strong)      0.50000000, 0.38000000, 0.12000000;
+  (calm, moderate, weak)     0.70000000, 0.24000000, 0.06000000;
+  (calm, moderate, moderate) 0.50000000, 0.38000000, 0.12000000;
+  (calm, moderate, strong)   0.28000000, 0.48000000, 0.24000000;
+  (calm, strong, weak)       0.40000000, 0.45000000, 0.15000000;
+  (calm, strong, moderate)   0.22000000, 0.48000000, 0.30000000;
+  (calm, strong, strong)     0.10000000, 0.40000000, 0.50000000;
+  (moderate, light, weak)    0.65000000, 0.28000000, 0.07000000;
+  (moderate, light, moderate)0.42000000, 0.42000000, 0.16000000;
+  (moderate, light, strong)  0.22000000, 0.48000000, 0.30000000;
+  (moderate, moderate, weak) 0.40000000, 0.45000000, 0.15000000;
+  (moderate, moderate, moderate) 0.20000000, 0.50000000, 0.30000000;
+  (moderate, moderate, strong)   0.10000000, 0.40000000, 0.50000000;
+  (moderate, strong, weak)   0.18000000, 0.50000000, 0.32000000;
+  (moderate, strong, moderate)   0.08000000, 0.35000000, 0.57000000;
+  (moderate, strong, strong) 0.03000000, 0.22000000, 0.75000000;
+  (rough, light, weak)       0.35000000, 0.48000000, 0.17000000;
+  (rough, light, moderate)   0.18000000, 0.48000000, 0.34000000;
+  (rough, light, strong)     0.08000000, 0.36000000, 0.56000000;
+  (rough, moderate, weak)    0.15000000, 0.48000000, 0.37000000;
+  (rough, moderate, moderate)0.07000000, 0.33000000, 0.60000000;
+  (rough, moderate, strong)  0.03000000, 0.20000000, 0.77000000;
+  (rough, strong, weak)      0.06000000, 0.30000000, 0.64000000;
+  (rough, strong, moderate)  0.03000000, 0.18000000, 0.79000000;
+  (rough, strong, strong)    0.01000000, 0.09000000, 0.90000000;
+}
+
+probability ( usv_risk | grounding_risk, collision_risk, navigation_difficulty ) {
+  (low, low, easy)       0.93000000, 0.06000000, 0.01000000;
+  (low, low, moderate)   0.78000000, 0.18000000, 0.04000000;
+  (low, low, difficult)  0.55000000, 0.35000000, 0.10000000;
+  (low, medium, easy)    0.65000000, 0.28000000, 0.07000000;
+  (low, medium, moderate)0.42000000, 0.42000000, 0.16000000;
+  (low, medium, difficult)   0.22000000, 0.48000000, 0.30000000;
+  (low, high, easy)      0.35000000, 0.47000000, 0.18000000;
+  (low, high, moderate)  0.18000000, 0.47000000, 0.35000000;
+  (low, high, difficult) 0.08000000, 0.32000000, 0.60000000;
+  (medium, low, easy)    0.70000000, 0.24000000, 0.06000000;
+  (medium, low, moderate)0.50000000, 0.38000000, 0.12000000;
+  (medium, low, difficult)   0.28000000, 0.48000000, 0.24000000;
+  (medium, medium, easy) 0.45000000, 0.40000000, 0.15000000;
+  (medium, medium, moderate) 0.25000000, 0.50000000, 0.25000000;
+  (medium, medium, difficult)0.10000000, 0.42000000, 0.48000000;
+  (medium, high, easy)   0.20000000, 0.50000000, 0.30000000;
+  (medium, high, moderate)   0.10000000, 0.38000000, 0.52000000;
+  (medium, high, difficult)  0.04000000, 0.22000000, 0.74000000;
+  (high, low, easy)      0.40000000, 0.45000000, 0.15000000;
+  (high, low, moderate)  0.22000000, 0.50000000, 0.28000000;
+  (high, low, difficult) 0.10000000, 0.38000000, 0.52000000;
+  (high, medium, easy)   0.18000000, 0.47000000, 0.35000000;
+  (high, medium, moderate)   0.08000000, 0.32000000, 0.60000000;
+  (high, medium, difficult)  0.03000000, 0.18000000, 0.79000000;
+  (high, high, easy)     0.08000000, 0.28000000, 0.64000000;
+  (high, high, moderate) 0.03000000, 0.18000000, 0.79000000;
+  (high, high, difficult)0.01000000, 0.06000000, 0.93000000;
+}

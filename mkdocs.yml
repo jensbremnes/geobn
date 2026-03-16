@@ -68,4 +68,5 @@ nav:
     - Internals: api/internals.md
   - Examples:
     - Lyngen Alps (Avalanche): examples/lyngen_alps.md
+    - Karmsundet (USV risk): examples/karmsundet.md
   - Contributing: contributing.md
