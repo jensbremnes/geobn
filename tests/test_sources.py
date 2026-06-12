@@ -1,7 +1,6 @@
 """Tests for data source classes."""
 from __future__ import annotations
 
-import io
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -13,7 +12,6 @@ from geobn._types import RasterData
 from geobn.grid import GridSpec
 from geobn.sources.point_grid_source import PointGridSource
 from geobn.sources.wcs_source import WCSSource
-
 
 # ---------------------------------------------------------------------------
 # Shared fixtures

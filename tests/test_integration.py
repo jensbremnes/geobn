@@ -147,7 +147,6 @@ class TestAutoGridResolution:
 
     def test_finest_source_wins(self, bn, fire_risk_model):
         """Register coarse source first, then fine source; grid must match the fine one."""
-        from affine import Affine
 
         coarse_transform = Affine(0.5, 0, 0.0, 0, -0.5, 50.0)  # 0.5° pixels
         fine_transform = Affine(0.1, 0, 0.0, 0, -0.1, 50.0)    # 0.1° pixels (finer)
@@ -166,7 +165,6 @@ class TestAutoGridResolution:
 
     def test_only_grid_aware_sources_raises(self, bn, fire_risk_model):
         """If every source requires_grid, auto-detection must raise a clear ValueError."""
-        from unittest.mock import MagicMock
         from geobn.sources._base import DataSource
 
         class FakeGridAwareSource(DataSource):

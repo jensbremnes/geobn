@@ -7,8 +7,6 @@ import logging
 from pathlib import Path
 from typing import Any
 
-_log = logging.getLogger(__name__)
-
 import numpy as np
 from pgmpy.models import DiscreteBayesianNetwork
 
@@ -17,6 +15,8 @@ from .grid import GridSpec, align_to_grid
 from .inference import run_inference, run_inference_from_table
 from .result import InferenceResult
 from .sources._base import DataSource
+
+_log = logging.getLogger(__name__)
 
 
 class GeoBayesianNetwork:
@@ -96,9 +96,7 @@ class GeoBayesianNetwork:
         self._inputs[node] = source
         # If this node was frozen and cached, the cached array is now stale
         if self._frozen_cache.pop(node, None) is not None:
-            self._inference_table.clear()
-            self._evidence_nodes = []
-            self._query_nodes = []
+            self._invalidate_table()
         _log.info("Input: '%s' ← %s", node, type(source).__name__)
 
     def set_discretization(
@@ -133,9 +131,7 @@ class GeoBayesianNetwork:
         self._discretizations[node] = spec
         # If this node was frozen and cached, the cached array used the old spec
         if self._frozen_cache.pop(node, None) is not None:
-            self._inference_table.clear()
-            self._evidence_nodes = []
-            self._query_nodes = []
+            self._invalidate_table()
         _log.info("Discretization: '%s' → %d bins %s", node, len(labels), labels)
 
     def set_grid(
@@ -158,9 +154,7 @@ class GeoBayesianNetwork:
         self._grid = GridSpec.from_params(crs, resolution, extent)
         self._cached_ref_grid = None
         self._frozen_cache.clear()
-        self._inference_table.clear()
-        self._evidence_nodes = []
-        self._query_nodes = []
+        self._invalidate_table()
         H, W = self._grid.shape
         _log.info("Grid set: %s, resolution=%g, shape=%d×%d", crs, resolution, H, W)
 
@@ -232,10 +226,14 @@ class GeoBayesianNetwork:
         self._frozen_cache.clear()
         self._cached_ref_grid = None
         self._cached_ve = None
+        self._invalidate_table()
+        _log.debug("Cache cleared")
+
+    def _invalidate_table(self) -> None:
+        """Drop the precomputed inference table and its node bookkeeping."""
         self._inference_table.clear()
         self._evidence_nodes = []
         self._query_nodes = []
-        _log.debug("Cache cleared")
 
     def precompute(self, query: list[str]) -> None:
         """Pre-run all evidence-state combinations and store a lookup table.
@@ -398,6 +396,12 @@ class GeoBayesianNetwork:
             self._validate_node_exists(n)
 
         # Validate array shapes match current discretizations
+        missing = [n for n in node_order if n not in self._discretizations]
+        if missing:
+            raise ValueError(
+                f"No discretization set for input node(s) {missing}.  "
+                "Call set_discretization() for every input before load_precomputed()."
+            )
         expected_n_states = [
             len(self._discretizations[n].labels) for n in node_order
         ]

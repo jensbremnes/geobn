@@ -120,7 +120,6 @@ def show_map(
         Path to the written HTML file.
     """
     import folium
-
     from pyproj import Transformer
 
     # ── WGS84 bounds from the result grid ─────────────────────────────────

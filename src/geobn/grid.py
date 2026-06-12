@@ -9,12 +9,12 @@ import logging
 from dataclasses import dataclass
 
 import numpy as np
-
-_log = logging.getLogger(__name__)
 from affine import Affine
 from pyproj import Transformer
 
 from ._types import RasterData
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass

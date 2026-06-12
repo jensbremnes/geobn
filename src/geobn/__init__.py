@@ -3,6 +3,14 @@ import logging as _logging
 
 from .network import GeoBayesianNetwork, load
 from .result import InferenceResult
+from .sources import (
+    ArraySource,
+    ConstantSource,
+    PointGridSource,
+    RasterSource,
+    URLSource,
+    WCSSource,
+)
 
 
 def set_verbose(enabled: bool = True) -> None:
@@ -30,15 +38,6 @@ def set_verbose(enabled: bool = True) -> None:
         logger.setLevel(_logging.WARNING)
         logger.propagate = True
 
-
-from .sources import (
-    ArraySource,
-    ConstantSource,
-    PointGridSource,
-    RasterSource,
-    URLSource,
-    WCSSource,
-)
 
 __all__ = [
     "load",

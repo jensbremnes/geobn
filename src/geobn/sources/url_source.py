@@ -5,14 +5,13 @@ from pathlib import Path
 
 import numpy as np
 import requests
-import rasterio
 from rasterio.io import MemoryFile
-
-_log = logging.getLogger(__name__)
 
 from .._types import RasterData
 from ..grid import GridSpec
 from ._base import DataSource
+
+_log = logging.getLogger(__name__)
 
 
 class URLSource(DataSource):

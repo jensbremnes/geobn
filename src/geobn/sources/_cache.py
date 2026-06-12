@@ -13,12 +13,12 @@ import json
 import logging
 from pathlib import Path
 
-_log = logging.getLogger(__name__)
-
 import numpy as np
 from affine import Affine
 
 from .._types import RasterData
+
+_log = logging.getLogger(__name__)
 
 
 def _make_cache_path(cache_dir: str | Path, key: dict) -> Path:

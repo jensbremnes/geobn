@@ -6,7 +6,7 @@ import pytest
 from affine import Affine
 
 from geobn._types import RasterData
-from geobn.grid import GridSpec, align_to_grid, _bilinear_resample, _reproject
+from geobn.grid import GridSpec, _bilinear_resample, _reproject, align_to_grid
 
 
 class TestGridSpec:

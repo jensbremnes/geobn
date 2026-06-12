@@ -15,7 +15,6 @@ from geobn.network import GeoBayesianNetwork
 from geobn.sources.array_source import ArraySource
 from geobn.sources.constant_source import ConstantSource
 
-
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
