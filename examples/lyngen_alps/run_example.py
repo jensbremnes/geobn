@@ -252,7 +252,7 @@ def main() -> None:
         else "moderate" if WIND_SPEED_MS < 15
         else "high"
     )
-    print(f"\nWeather scenario")
+    print("\nWeather scenario")
     print(f"  Recent snow  : {RECENT_SNOW_CM:.0f} cm   → {snow_state}")
     print(f"  Temperature  : {AIR_TEMP_C:.0f}°C   → {temp_state}")
     print(f"  Wind speed   : {WIND_SPEED_MS:.0f} m/s  → {wind_state}")
@@ -265,7 +265,6 @@ def main() -> None:
         sys.exit(f"ERROR during inference: {exc}")
 
     probs = result.probabilities["avalanche_risk"]   # (H, W, 2)
-    ent   = result.entropy("avalanche_risk")          # (H, W)
 
     # ── 7. Console statistics ──────────────────────────────────────────────
     def bar(val: float, width: int = 20) -> str:

@@ -279,12 +279,10 @@ def main() -> None:
     if ais_path.exists():
         print(f"AIS density : loading from {ais_path.name}")
         bn.set_input("vessel_traffic", geobn.RasterSource(ais_path))
-        ais_array = None   # loaded inside BN; we'll retrieve it for stats
     else:
         print("AIS density : file not found — using ConstantSource(2.0) [medium traffic]")
         print("              Run create_ais_density.py to generate the real raster.")
         bn.set_input("vessel_traffic", geobn.ConstantSource(2.0))
-        ais_array = None
 
     print("\nTesting Met.no API connectivity ...")
     _centre_lat = (SOUTH + NORTH) / 2

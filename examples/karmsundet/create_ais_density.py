@@ -90,7 +90,6 @@ def process_ais_csv(csv_path: Path, n_days: int = 30) -> None:
 
     # Try common Kystverket separator variants
     try:
-        import csv as csv_mod
         with open(csv_path, newline="", encoding="utf-8-sig") as fh:
             sample = fh.read(4096)
         delimiter = ";" if sample.count(";") > sample.count(",") else ","
