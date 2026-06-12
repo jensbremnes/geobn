@@ -12,7 +12,7 @@ from pgmpy.models import DiscreteBayesianNetwork
 
 from .discretize import DiscretizationSpec, discretize_array
 from .grid import GridSpec, align_to_grid
-from .inference import run_inference, run_inference_from_table
+from .inference import build_conditional_table, run_inference, run_inference_from_table
 from .result import InferenceResult
 from .sources._base import DataSource
 
@@ -243,9 +243,10 @@ class GeoBayesianNetwork:
         table via numpy fancy indexing — O(H×W) rather than O(n_unique_combos)
         pgmpy queries.
 
-        One-time cost: ``∏ n_states_i`` pgmpy queries.  For the Lyngen Alps BN
-        (3×2×3×3 state space) this is 54 queries, typically completing in well
-        under a second.
+        One-time cost: a single pgmpy joint query per query node (the joint
+        P(query, e_1, ..., e_k) is normalised into the conditional table).
+        Only when the table would exceed the in-memory size bound does this
+        fall back to one query per evidence combination.
 
         Parameters
         ----------
@@ -279,25 +280,35 @@ class GeoBayesianNetwork:
             self._cached_ve = VariableElimination(self._model)
         ve = self._cached_ve
 
-        # Allocate tables: shape (*n_states_per_node, n_q_states) for each query node
-        tables: dict[str, np.ndarray] = {}
-        for qnode in query:
-            n_q = len(query_state_names[qnode])
-            tables[qnode] = np.zeros(n_states_per_node + [n_q], dtype=np.float32)
-
         n_total = 1
         for k in n_states_per_node:
             n_total *= k
         _log.info("Precomputing inference table: %d evidence combination(s) ...", n_total)
 
-        for idx_combo in itertools.product(*[range(k) for k in n_states_per_node]):
-            evidence = {
-                node_order[i]: state_names_per_node[node_order[i]][idx_combo[i]]
-                for i in range(len(node_order))
-            }
+        # Fast path: one joint VE query per query node covers every evidence
+        # combination at once.  Returns None only when the table exceeds the
+        # in-memory size bound — then fall back to the per-combination loop.
+        tables = build_conditional_table(self._model, node_order, query, ve=ve)
+
+        if tables is None:
+            _log.warning(
+                "Conditional table too large for the joint-query strategy — "
+                "enumerating %d combination(s) individually (this may be slow)",
+                n_total,
+            )
+            tables = {}
             for qnode in query:
-                factor = ve.query([qnode], evidence=evidence, show_progress=False)
-                tables[qnode][idx_combo] = factor.values.astype(np.float32)
+                n_q = len(query_state_names[qnode])
+                tables[qnode] = np.zeros(n_states_per_node + [n_q], dtype=np.float32)
+
+            for idx_combo in itertools.product(*[range(k) for k in n_states_per_node]):
+                evidence = {
+                    node_order[i]: state_names_per_node[node_order[i]][idx_combo[i]]
+                    for i in range(len(node_order))
+                }
+                for qnode in query:
+                    factor = ve.query([qnode], evidence=evidence, show_progress=False)
+                    tables[qnode][idx_combo] = factor.values.astype(np.float32)
 
         self._inference_table = tables
         self._evidence_nodes = node_order

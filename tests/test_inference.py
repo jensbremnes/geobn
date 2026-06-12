@@ -4,7 +4,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from geobn.inference import run_inference, shannon_entropy
+import geobn.inference as inference_module
+from geobn.inference import build_conditional_table, run_inference, shannon_entropy
 
 
 class TestRunInference:
@@ -131,6 +132,120 @@ class TestRunInference:
         for i in range(H):
             for j in range(W):
                 np.testing.assert_array_almost_equal(probs[i, j], probs[0, 0])
+
+
+class TestBuildConditionalTable:
+    def test_matches_per_combo_queries(self, fire_risk_model):
+        """The single-joint-query table must equal one VE query per combination."""
+        from pgmpy.inference import VariableElimination
+
+        tables = build_conditional_table(
+            fire_risk_model, ["slope", "rainfall"], ["fire_risk"]
+        )
+        assert tables is not None
+        table = tables["fire_risk"]
+        assert table.shape == (3, 3, 3)
+        np.testing.assert_allclose(table.sum(axis=-1), 1.0, atol=1e-5)
+
+        ve = VariableElimination(fire_risk_model)
+        slope_states = ["flat", "moderate", "steep"]
+        rainfall_states = ["low", "medium", "high"]
+        for i, s in enumerate(slope_states):
+            for j, r in enumerate(rainfall_states):
+                expected = ve.query(
+                    ["fire_risk"],
+                    evidence={"slope": s, "rainfall": r},
+                    show_progress=False,
+                ).values
+                np.testing.assert_allclose(table[i, j], expected, atol=1e-6)
+
+    def test_axis_order_follows_evidence_nodes(self, fire_risk_model):
+        """Swapping the evidence node order must transpose the table axes."""
+        t_sr = build_conditional_table(fire_risk_model, ["slope", "rainfall"], ["fire_risk"])
+        t_rs = build_conditional_table(fire_risk_model, ["rainfall", "slope"], ["fire_risk"])
+        np.testing.assert_allclose(
+            t_sr["fire_risk"], np.transpose(t_rs["fire_risk"], (1, 0, 2)), atol=1e-6
+        )
+
+    def test_size_bound_returns_none(self, fire_risk_model):
+        result = build_conditional_table(
+            fire_risk_model, ["slope", "rainfall"], ["fire_risk"], max_table_cells=1
+        )
+        assert result is None
+
+    def test_query_node_in_evidence_returns_none(self, fire_risk_model):
+        result = build_conditional_table(fire_risk_model, ["slope"], ["slope"])
+        assert result is None
+
+
+class TestStrategyEquivalence:
+    @staticmethod
+    def _random_inference_kwargs(model, seed=0, H=20, W=20):
+        rng = np.random.default_rng(seed)
+        evidence_state_grids = {
+            "slope": rng.integers(0, 3, (H, W)).astype(np.int16),
+            "rainfall": rng.integers(0, 3, (H, W)).astype(np.int16),
+        }
+        nodata_mask = np.zeros((H, W), dtype=bool)
+        nodata_mask[0, 0] = True
+        evidence_state_grids["slope"][0, 0] = -1
+        return dict(
+            model=model,
+            evidence_state_grids=evidence_state_grids,
+            evidence_state_names={
+                "slope": ["flat", "moderate", "steep"],
+                "rainfall": ["low", "medium", "high"],
+            },
+            query_nodes=["fire_risk"],
+            query_state_names={"fire_risk": ["low", "medium", "high"]},
+            nodata_mask=nodata_mask,
+        )
+
+    def test_joint_path_matches_loop_path(self, fire_risk_model, monkeypatch):
+        kwargs = self._random_inference_kwargs(fire_risk_model)
+
+        monkeypatch.setattr(inference_module, "_COMBO_LOOP_THRESHOLD", 10**9)
+        loop_result = run_inference(**kwargs)
+
+        monkeypatch.setattr(inference_module, "_COMBO_LOOP_THRESHOLD", 0)
+        joint_result = run_inference(**kwargs)
+
+        np.testing.assert_allclose(
+            loop_result["fire_risk"], joint_result["fire_risk"],
+            atol=1e-6, equal_nan=True,
+        )
+
+    def test_loop_fallback_when_table_rejected(self, fire_risk_model, monkeypatch):
+        """If the table builder declines, the per-combo loop must still run."""
+        kwargs = self._random_inference_kwargs(fire_risk_model)
+        monkeypatch.setattr(inference_module, "_COMBO_LOOP_THRESHOLD", 0)
+        monkeypatch.setattr(
+            inference_module, "build_conditional_table", lambda *a, **k: None
+        )
+        result = run_inference(**kwargs)
+        probs = result["fire_risk"]
+        assert np.all(np.isnan(probs[0, 0, :]))
+        valid = ~kwargs["nodata_mask"]
+        np.testing.assert_allclose(probs[valid].sum(axis=-1), 1.0, atol=1e-5)
+
+    def test_multiple_query_nodes_shared_elimination(self, fire_risk_model):
+        """Evidence on slope only; query both fire_risk and rainfall."""
+        H, W = 2, 2
+        result = run_inference(
+            model=fire_risk_model,
+            evidence_state_grids={"slope": np.zeros((H, W), dtype=np.int16)},
+            evidence_state_names={"slope": ["flat", "moderate", "steep"]},
+            query_nodes=["fire_risk", "rainfall"],
+            query_state_names={
+                "fire_risk": ["low", "medium", "high"],
+                "rainfall": ["low", "medium", "high"],
+            },
+            nodata_mask=np.zeros((H, W), dtype=bool),
+        )
+        # rainfall is independent of slope → its prior
+        np.testing.assert_allclose(result["rainfall"][0, 0], [0.3, 0.4, 0.3], atol=1e-5)
+        # P(fire_risk | slope=flat) marginalised over the rainfall prior
+        np.testing.assert_allclose(result["fire_risk"][0, 0], [0.57, 0.30, 0.13], atol=1e-5)
 
 
 class TestShannonEntropy:
