@@ -6,7 +6,7 @@
 ┌──────────────┐     ┌──────────────────┐     ┌──────────────┐     ┌──────────────────┐
 │ DataSource   │────►│ align_to_grid()  │────►│ discretize() │────►│ BN inference     │
 │ (per node)   │     │ reproject + resample   │ continuous → │     │ VariableElim.    │
-└──────────────┘     │ to reference grid│     │ BN states    │     │ per unique combo │
+└──────────────┘     │ to reference grid│     │ BN states    │     │ batched queries  │
                      └──────────────────┘     └──────────────┘     └──────────┬───────┘
                                                                                │
                                                                     ┌──────────▼───────┐
@@ -78,12 +78,26 @@ This means:
 ## Inference batching
 
 Running one pgmpy `VariableElimination.query()` per pixel is prohibitively slow for
-large rasters. geobn uses `np.unique(..., axis=0, return_inverse=True)` to group all
-pixels by their unique discrete evidence combination. One pgmpy query runs per unique
-combination, and the result is scattered back to the original pixel positions.
+large rasters. geobn first groups all pixels by their unique discrete evidence
+combination, then picks one of two strategies:
 
-For a 500×500 grid with 3 evidence nodes (3 states each), there are only 27 possible
-unique combinations regardless of grid size.
+- **Few combinations** (≤ 200): one pgmpy query per unique combination. For a
+  500×500 grid with 3 evidence nodes (3 states each), there are only 27 possible
+  combinations regardless of grid size.
+- **Many combinations**: a *single* pgmpy joint query computes
+  P(query, e₁, …, eₖ); normalising along the query axis yields the full
+  conditional table P(query | e₁, …, eₖ) for **every** combination at once.
+  Per-pixel results are then read by numpy fancy indexing. This keeps networks
+  with many evidence nodes tractable — e.g. 10 nodes × 3 states (59,049
+  combinations) resolves in well under a second, where a per-combination loop
+  would take minutes.
+
+The joint-query strategy is used whenever the conditional table fits within an
+in-memory bound (~80 MB); beyond that, geobn falls back to the per-combination
+loop, which shares a single elimination pass across all query nodes.
+
+In both cases the result is scattered back to the original pixel positions, and
+evidence combinations with zero prior probability yield NaN posteriors.
 
 ## Output
 
@@ -109,8 +123,9 @@ fixed), geobn provides two optimisation tiers:
 is computed once on the first `infer()` call and cached for all subsequent calls.
 The pgmpy `VariableElimination` object is also cached.
 
-**Tier 2 — `bn.precompute(query)`**: runs all ∏ n_states combinations once and stores
-a numpy lookup table. Subsequent `infer()` calls use O(H×W) fancy indexing — zero pgmpy
-queries per call. Best for real-time dashboards with a fixed BN structure.
+**Tier 2 — `bn.precompute(query)`**: solves all ∏ n_states combinations once (via a
+single joint query per query node) and stores a numpy lookup table. Subsequent
+`infer()` calls use O(H×W) fancy indexing — zero pgmpy queries per call. Best for
+real-time dashboards with a fixed BN structure.
 
 Call `bn.clear_cache()` to reset all caches if inputs change.

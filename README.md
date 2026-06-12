@@ -11,7 +11,7 @@ Bayesian network inference over geospatial data.
 
 `geobn` lets you turn heterogeneous data sources (offline and real-time) into insight over geographical areas by using techniques in probabilistic AI. The library is domain-agnostic, and may be used for, e.g., environmental risk assessment and risk‑informed route planning.
 
-This is achieved by wiring different data sources — rasters, remote APIs, or plain scalars — directly into a Bayesian network, and run pixel-wise inference, producing posterior probability maps and entropy rasters. Under the hood it groups pixels by unique evidence combinations, so each inference query is solved once per combination instead of once per pixel, keeping computations of large areas computationally tractable. Static sources can be disk-cached to avoid redundant network fetches, and `bn.precompute()` can pre-solve all evidence combinations into a lookup table, reducing repeated inference calls to pure array indexing. The table can be saved with `bn.save_precomputed()` and loaded on any machine with `bn.load_precomputed()` — no pgmpy required at runtime.
+This is achieved by wiring different data sources — rasters, remote APIs, or plain scalars — directly into a Bayesian network, and run pixel-wise inference, producing posterior probability maps and entropy rasters. Under the hood it groups pixels by unique evidence combinations and, for large networks, solves *all* combinations with a single joint query — so inference stays fast even with many evidence nodes over millions of pixels. Static sources can be disk-cached to avoid redundant network fetches, and `bn.precompute()` can pre-solve all evidence combinations into a lookup table, reducing repeated inference calls to pure array indexing. The table can be saved with `bn.save_precomputed()` and loaded on any machine with `bn.load_precomputed()` — no pgmpy required at runtime.
 
 Full docs (API reference, concepts, examples) are hosted at:
 **https://jensbremnes.github.io/geobn**
@@ -56,7 +56,7 @@ DataSources  →  align to grid  →  discretize  →  BN inference  →  Infere
 1. **Load a BN** — `geobn.load("model.bif")` reads a standard `.bif` file via pgmpy.
 2. **Attach sources** — each evidence node gets a `DataSource`. All sources are reprojected and resampled to a common grid at inference time (the finest-resolution georeferenced source sets the grid automatically, or call `bn.set_grid()` explicitly).
 3. **Discretize** — `set_discretization(node, breakpoints)` bins continuous values into the discrete states your BN expects.
-4. **Infer** — unique evidence combinations are batched; pgmpy `VariableElimination` runs once per unique combo, not once per pixel.
+4. **Infer** — pixels are grouped by unique evidence combination, never queried individually. For a handful of combinations pgmpy `VariableElimination` runs once per combo; for many combinations the full conditional table P(query | evidence) is computed with a *single* joint query and results are mapped to pixels by array indexing.
 5. **Export** — `InferenceResult` gives you a numpy array, an xarray Dataset, or a multi-band GeoTIFF (N probability bands + entropy).
 
 ---
@@ -188,10 +188,10 @@ for wind_ms in [3, 8, 20]:
     result.to_geotiff(f"out/wind_{wind_ms}ms/")
 ```
 
-For maximum throughput, pre-run all evidence combinations once and reduce subsequent calls to a numpy index lookup. `bn.precompute()` exhausts every combination of discrete evidence states, stores the results in an in-memory lookup table, and subsequent `bn.infer()` calls resolve each pixel by indexing into that table — no pgmpy inference at runtime.
+For maximum throughput, pre-solve all evidence combinations once and reduce subsequent calls to a numpy index lookup. `bn.precompute()` builds the full conditional table for every combination of discrete evidence states (computed with a single pgmpy joint query, so it is cheap even for large state spaces), and subsequent `bn.infer()` calls resolve each pixel by indexing into that table — no pgmpy inference at runtime.
 
 ```python
-bn.precompute(query=["avalanche_risk"])  # one-time cost: runs all state combinations
+bn.precompute(query=["avalanche_risk"])  # one-time cost: one joint query covers all state combinations
 result = bn.infer(query=["avalanche_risk"])  # O(H×W) array indexing — no pgmpy at runtime
 ```
 

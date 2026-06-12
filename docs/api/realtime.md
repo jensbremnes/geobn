@@ -8,10 +8,10 @@ such as continuously updating a dashboard as sensor values change.
 ## The problem
 
 By default, every call to `bn.infer()` fetches, aligns, and discretises **all**
-inputs, then runs one pgmpy `VariableElimination` query per unique evidence
-combination.  For a 1000×1000 grid with terrain sources that never change, this
-is wasteful: DEM fetch + reprojection + discretisation can take several seconds
-even though the result is the same every time.
+inputs, then runs batched pgmpy inference over the unique evidence combinations.
+For a 1000×1000 grid with terrain sources that never change, this is wasteful:
+DEM fetch + reprojection + discretisation can take several seconds even though
+the result is the same every time.
 
 ---
 
@@ -46,13 +46,13 @@ discard the stale arrays before the next `infer()`.
 ## Tier 2 — Precompute all evidence combinations
 
 When **all** inputs are effectively static and only a few dynamic scalar inputs
-change, pre-run the entire state-space combinatorial product once and store the
-results as a numpy lookup table:
+change, pre-solve the entire state-space combinatorial product once and store
+the results as a numpy lookup table:
 
 ```python
 bn.precompute(query=["avalanche_risk"])
-# One-time cost: ∏ n_states_i pgmpy queries.
-# For a 3×2×3×3 state space this is 54 queries (< 1 second).
+# One-time cost: a single pgmpy joint query per query node covers every
+# evidence combination at once — fast even for large state spaces.
 
 result = bn.infer(query=["avalanche_risk"])
 # Zero pgmpy calls — O(H×W) numpy fancy indexing only.

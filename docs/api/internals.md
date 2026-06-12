@@ -32,6 +32,10 @@
     options:
       show_root_heading: true
 
+::: geobn.inference.build_conditional_table
+    options:
+      show_root_heading: true
+
 ::: geobn.inference.run_inference_from_table
     options:
       show_root_heading: true
