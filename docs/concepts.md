@@ -78,26 +78,69 @@ This means:
 ## Inference batching
 
 Running one pgmpy `VariableElimination.query()` per pixel is prohibitively slow for
-large rasters. geobn first groups all pixels by their unique discrete evidence
-combination, then picks one of two strategies:
+large rasters, so geobn never queries per pixel. Instead, inference proceeds in two
+steps: first **measure** how much distinct evidence the map actually contains, then
+**choose** the cheapest strategy for that amount.
 
-- **Few combinations** (≤ 200): one pgmpy query per unique combination. For a
-  500×500 grid with 3 evidence nodes (3 states each), there are only 27 possible
-  combinations regardless of grid size.
-- **Many combinations**: a *single* pgmpy joint query computes
-  P(query, e₁, …, eₖ); normalising along the query axis yields the full
-  conditional table P(query | e₁, …, eₖ) for **every** combination at once.
-  Per-pixel results are then read by numpy fancy indexing. This keeps networks
-  with many evidence nodes tractable — e.g. 10 nodes × 3 states (59,049
-  combinations) resolves in well under a second, where a per-combination loop
-  would take minutes.
+### Step 1 — group pixels by observed evidence combination
 
-The joint-query strategy is used whenever the conditional table fits within an
-in-memory bound (~80 MB); beyond that, geobn falls back to the per-combination
-loop, which shares a single elimination pass across all query nodes.
+After discretization, every pixel is described by one state index per evidence node
+— e.g. `(slope=steep, rainfall=high)`. geobn groups all valid pixels by these
+combinations and counts how many **distinct combinations actually occur on the map**.
 
-In both cases the result is scattered back to the original pixel positions, and
-evidence combinations with zero prior probability yield NaN posteriors.
+This count is the key quantity, and it is usually far smaller than the number of
+*theoretically possible* combinations:
+
+- It can never exceed the number of valid pixels.
+- Geography is spatially correlated — neighbouring pixels tend to share the same
+  slope class, forest class, etc.
+- Scalar inputs (`ConstantSource`, live weather values) contribute exactly one state
+  each, collapsing the combination count further.
+
+A network with millions of *possible* combinations may still produce only a few
+dozen *observed* ones, and geobn's strategy choice is driven entirely by the
+observed count — the size of the theoretical state space costs nothing by itself.
+
+### Step 2 — choose a strategy
+
+**Few observed combinations (≤ 200): per-combination queries.** One pgmpy
+`VariableElimination` query runs per observed combination (a single elimination pass
+shared across all query nodes). For a 500×500 grid with 3 evidence nodes (3 states
+each) there are at most 27 combinations regardless of grid size — a handful of
+targeted queries is the cheapest possible approach.
+
+**Many observed combinations: one joint query.** Asking thousands of nearly
+identical questions repeats the same internal propagation work each time. Instead,
+geobn asks pgmpy a single bigger question: the **joint** distribution
+P(query, e₁, …, eₖ) with no evidence at all. Normalising that array along the query
+axis converts it into the full conditional table P(query | e₁, …, eₖ) — the answer
+for *every* combination at once:
+
+```
+P(query | e₁, …, eₖ) = P(query, e₁, …, eₖ) / P(e₁, …, eₖ)
+```
+
+Per-pixel results are then read from the table by numpy fancy indexing. This keeps
+networks with many evidence nodes tractable: 10 nodes × 3 states (59,049
+combinations) resolves in well under a second, where the per-combination loop would
+take minutes.
+
+**Safety valve:** the joint table's size is the product of all evidence state counts
+× the query state count. If that exceeds an in-memory bound (~80 MB), the joint
+strategy is skipped and the per-combination loop is used — slower, but it only ever
+pays for combinations that actually occur.
+
+### Summary of regimes
+
+| Observed combos | Table fits in memory? | Strategy | Cost |
+|---|---|---|---|
+| ≤ 200 | (irrelevant) | per-combination queries | milliseconds |
+| many | yes | single joint query + table lookup | ~constant, sub-second |
+| many | no | per-combination queries | proportional to observed combos |
+
+In all cases the per-combination results are scattered back to the original pixel
+positions, and evidence combinations with zero prior probability yield NaN
+posteriors.
 
 ## Output
 

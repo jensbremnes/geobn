@@ -56,7 +56,7 @@ DataSources  →  align to grid  →  discretize  →  BN inference  →  Infere
 1. **Load a BN** — `geobn.load("model.bif")` reads a standard `.bif` file via pgmpy.
 2. **Attach sources** — each evidence node gets a `DataSource`. All sources are reprojected and resampled to a common grid at inference time (the finest-resolution georeferenced source sets the grid automatically, or call `bn.set_grid()` explicitly).
 3. **Discretize** — `set_discretization(node, breakpoints)` bins continuous values into the discrete states your BN expects.
-4. **Infer** — pixels are grouped by unique evidence combination, never queried individually. For a handful of combinations pgmpy `VariableElimination` runs once per combo; for many combinations the full conditional table P(query | evidence) is computed with a *single* joint query and results are mapped to pixels by array indexing.
+4. **Infer** — pixels are grouped by unique evidence combination, never queried individually. The strategy is chosen from the combinations **actually observed on the map** (usually far fewer than the theoretically possible ones): a handful of combinations means a few targeted pgmpy `VariableElimination` queries; many combinations means the full conditional table P(query | evidence) is computed with a *single* joint query and results are mapped to pixels by array indexing. See [How it works](https://jensbremnes.github.io/geobn/concepts/#inference-batching) for details.
 5. **Export** — `InferenceResult` gives you a numpy array, an xarray Dataset, or a multi-band GeoTIFF (N probability bands + entropy).
 
 ---
