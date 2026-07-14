@@ -22,6 +22,8 @@ sources to evidence nodes, configure discretization, and call `infer()`.
         - precompute
         - save_precomputed
         - load_precomputed
+        - query_point
+        - query_batch
         - clear_cache
         - infer
 
