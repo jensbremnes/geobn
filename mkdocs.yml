@@ -61,6 +61,7 @@ nav:
     - GeoBayesianNetwork: api/network.md
     - Real-time optimisation: api/realtime.md
     - InferenceResult: api/result.md
+    - Analysis: api/analysis.md
     - Data Sources:
       - Overview: api/sources/index.md
       - Core sources: api/sources/core.md
