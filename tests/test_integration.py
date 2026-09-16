@@ -224,6 +224,16 @@ class TestFetchRawAndArraySource:
         valid = ~np.isnan(probs[..., 0])
         np.testing.assert_allclose(probs[valid].sum(axis=-1), 1.0, atol=1e-5)
 
+    def test_array_source_no_crs_wrong_shape_raises(self, bn, rainfall_array):
+        bn.set_grid("EPSG:4326", 0.1, (0.0, 49.0, 1.0, 50.0))
+        bn.set_input("slope",    geobn.ArraySource(np.ones((4, 4), dtype=np.float32)))
+        bn.set_input("rainfall", geobn.ArraySource(rainfall_array))
+        bn.set_discretization("slope", [0, 10, 30, 90], ["flat", "moderate", "steep"])
+        bn.set_discretization("rainfall", [0, 25, 75, 200], ["low", "medium", "high"])
+
+        with pytest.raises(ValueError, match="without CRS"):
+            bn.infer(query=["fire_risk"])
+
     def test_raster_source_nodata_gives_nan_posterior(
         self, bn, slope_array, reference_transform, tmp_path
     ):
