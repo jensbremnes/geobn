@@ -36,10 +36,11 @@ bn.set_input("recent_snow", geobn.ConstantSource(30.0))
 ```
 
 At inference time, geobn inspects all registered georeferenced sources and selects the
-one with the **finest resolution** (smallest pixel size) as the **reference grid** (CRS,
-resolution, extent). All other sources are reprojected to this grid automatically. To
-override this behaviour, call `bn.set_grid(crs, resolution, extent)` explicitly before
-running inference.
+one with the **finest resolution** as the **reference grid** (CRS, resolution, extent).
+Pixel sizes are compared in metres on the ground (measured at each grid's centre), so a
+10 m UTM raster correctly beats a 0.001° WGS84 raster even though 0.001 < 10 in CRS units. All other sources are reprojected to this grid
+automatically. To override this behaviour, call `bn.set_grid(crs, resolution, extent)`
+explicitly before running inference.
 
 ## GridSpec and alignment
 
