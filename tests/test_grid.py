@@ -6,7 +6,7 @@ import pytest
 from affine import Affine
 
 from geobn._types import RasterData
-from geobn.grid import GridSpec, _bilinear_resample, _reproject, align_to_grid
+from geobn.grid import GridSpec, _bilinear_resample, _pixel_size_m, _reproject, align_to_grid
 
 
 class TestGridSpec:
@@ -47,6 +47,23 @@ class TestGridSpec:
         lon_min, lat_min, lon_max, lat_max = grid.extent_wgs84()
         assert lon_min == pytest.approx(0.0, abs=0.01)
         assert lat_max == pytest.approx(50.0, abs=0.01)
+
+
+class TestPixelSizeM:
+    def test_projected_metres(self):
+        grid = GridSpec(
+            crs="EPSG:32632", transform=Affine(10, 0, 500_000, 0, -10, 6_650_000), shape=(20, 20)
+        )
+        # UTM scale factor near the central meridian is ~0.9996
+        assert _pixel_size_m(grid) == pytest.approx(10.0, rel=1e-2)
+
+    def test_degrees_at_equator(self):
+        grid = GridSpec(crs="EPSG:4326", transform=Affine(0.001, 0, 0.0, 0, -0.001, 0.01), shape=(20, 20))
+        assert _pixel_size_m(grid) == pytest.approx(111.0, rel=1e-2)
+
+    def test_degrees_at_60n_uses_geometric_mean(self):
+        grid = GridSpec(crs="EPSG:4326", transform=Affine(0.001, 0, 9.0, 0, -0.001, 60.01), shape=(20, 20))
+        assert _pixel_size_m(grid) == pytest.approx(np.sqrt(55.8 * 111.4), rel=1e-2)
 
 
 class TestAlignToGrid:

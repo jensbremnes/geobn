@@ -163,6 +163,27 @@ class TestAutoGridResolution:
         # Output grid shape should match the fine source (10×10), not the coarse (2×2)
         assert result.probabilities["fire_risk"].shape[:2] == (10, 10)
 
+    def test_finest_source_wins_across_crs(self, bn):
+        """A 10 m UTM grid beats a 0.001° (~79 m) WGS84 grid, although 0.001 < 10 in CRS units."""
+        from pyproj import Transformer
+
+        # 10 m UTM 32N raster around 9.01°E, 60.005°N
+        x0, y0 = Transformer.from_crs("EPSG:4326", "EPSG:32632", always_xy=True).transform(9.0, 60.01)
+        utm = np.ones((100, 100), dtype=np.float32) * 5.0
+        utm_transform = Affine(10, 0, x0, 0, -10, y0)
+        # 0.001° WGS84 raster covering the same area; registered last
+        deg = np.ones((20, 20), dtype=np.float32) * 5.0
+        deg_transform = Affine(0.001, 0, 9.0, 0, -0.001, 60.01)
+
+        bn.set_input("slope",    geobn.ArraySource(utm, crs="EPSG:32632", transform=utm_transform))
+        bn.set_input("rainfall", geobn.ArraySource(deg, crs="EPSG:4326",  transform=deg_transform))
+        bn.set_discretization("slope",    [0, 10, 30, 90], ["flat", "moderate", "steep"])
+        bn.set_discretization("rainfall", [0, 25, 75, 200], ["low", "medium", "high"])
+
+        result = bn.infer(query=["fire_risk"])
+        assert result.crs == "EPSG:32632"
+        assert result.probabilities["fire_risk"].shape[:2] == (100, 100)
+
     def test_only_grid_aware_sources_raises(self, bn, fire_risk_model):
         """If every source requires_grid, auto-detection must raise a clear ValueError."""
         from geobn.sources._base import DataSource

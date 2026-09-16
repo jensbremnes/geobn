@@ -11,7 +11,7 @@ import numpy as np
 from pgmpy.models import DiscreteBayesianNetwork
 
 from .discretize import DiscretizationSpec, discretize_array
-from .grid import GridSpec, align_to_grid
+from .grid import GridSpec, _pixel_size_m, align_to_grid
 from .inference import build_conditional_table, run_inference, run_inference_from_table
 from .result import InferenceResult
 from .sources._base import DataSource
@@ -487,7 +487,7 @@ class GeoBayesianNetwork:
             # can inspect its CRS and resolution.  Grid-aware sources cannot be
             # fetched yet — they need the bbox, which we don't know yet.
             pre_fetched = {}
-            candidate_grids: list[tuple[float, GridSpec, str]] = []  # (pixel_size, grid, node)
+            candidate_grids: list[tuple[float, GridSpec, str]] = []  # (pixel_size_m, grid, node)
 
             for node, source in self._inputs.items():
                 if source.requires_grid:
@@ -497,8 +497,8 @@ class GeoBayesianNetwork:
                 if data.crs is None:
                     continue  # ConstantSource or similar — no spatial info
                 grid_candidate = GridSpec.from_raster_data(data)
-                pixel_size = abs(grid_candidate.transform.a)
-                candidate_grids.append((pixel_size, grid_candidate, node))
+                # Compare in metres: CRS units differ between sources (degrees vs metres)
+                candidate_grids.append((_pixel_size_m(grid_candidate), grid_candidate, node))
 
             if not candidate_grids:
                 raise ValueError(
@@ -510,8 +510,11 @@ class GeoBayesianNetwork:
 
             # Pick the source with the finest (smallest) pixel size so that
             # high-resolution sources are never downsampled unnecessarily.
-            _smallest_pixel, ref_grid, ref_node = min(candidate_grids, key=lambda t: t[0])
-            _log.info("Auto-selected reference grid from '%s' (finest resolution)", ref_node)
+            smallest_pixel_m, ref_grid, ref_node = min(candidate_grids, key=lambda t: t[0])
+            _log.info(
+                "Auto-selected reference grid from '%s' (finest resolution, ~%.3g m pixels)",
+                ref_node, smallest_pixel_m,
+            )
 
         _log.info(
             "Reference grid: %s, shape=%d×%d, resolution=%g",

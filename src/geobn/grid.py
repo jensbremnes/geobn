@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 import numpy as np
 from affine import Affine
-from pyproj import Transformer
+from pyproj import Geod, Transformer
 
 from ._types import RasterData
 
@@ -92,6 +92,29 @@ class GridSpec:
         transformer = Transformer.from_crs(self.crs, "EPSG:4326", always_xy=True)
         lons, lats = transformer.transform(corner_x, corner_y)
         return float(min(lons)), float(min(lats)), float(max(lons)), float(max(lats))
+
+
+def _pixel_size_m(grid: GridSpec) -> float:
+    """Return the ground size of the grid's centre pixel in metres.
+
+    The pixel's column and row steps are measured as geodesic distances on
+    the WGS84 ellipsoid, so grids in different CRSs (degrees, metres, feet)
+    can be compared.  Non-square pixels are reduced to the geometric mean of
+    the two sides, i.e. the side of a square with the same ground area.
+    """
+    H, W = grid.shape
+    col, row = W / 2, H / 2
+    xs, ys = zip(
+        grid.transform * (col, row),
+        grid.transform * (col + 1, row),
+        grid.transform * (col, row + 1),
+    )
+    transformer = Transformer.from_crs(grid.crs, "EPSG:4326", always_xy=True)
+    lons, lats = transformer.transform(xs, ys)
+    geod = Geod(ellps="WGS84")
+    _, _, dx = geod.inv(lons[0], lats[0], lons[1], lats[1])
+    _, _, dy = geod.inv(lons[0], lats[0], lons[2], lats[2])
+    return float(np.sqrt(dx * dy))
 
 
 # ---------------------------------------------------------------------------
