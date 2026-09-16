@@ -8,6 +8,7 @@ import numpy as np
 import requests
 from rasterio.io import MemoryFile
 
+from .._io import read_first_band
 from .._types import RasterData
 from ..grid import GridSpec
 from ._base import DataSource
@@ -122,15 +123,14 @@ class WCSSource(DataSource):
 
         with MemoryFile(response.content) as memfile:
             with memfile.open() as src:
-                array = src.read(1).astype(np.float32)
-                crs = src.crs.to_string()
-                transform = src.transform
+                result = read_first_band(src)
 
+        # Servers that do not declare nodata may still encode it as extreme
+        # sentinel values — valid_range masks those.
         if self._valid_range is not None:
             lo, hi = self._valid_range
+            array = result.array
             array[(array < lo) | (array > hi)] = np.nan
-
-        result = RasterData(array=array, crs=crs, transform=transform)
 
         # ── Save to cache ─────────────────────────────────────────────────
         if self._cache_dir is not None:

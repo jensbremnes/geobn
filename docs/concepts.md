@@ -74,6 +74,12 @@ This means:
 - Pixels outside WCS coverage → NaN inputs → NaN outputs
 - Sea pixels in a land DEM → NaN depth → NaN output
 - Invalid sensor readings → NaN evidence → NaN posteriors
+- File nodata → NaN: `RasterSource`, `URLSource` and `WCSSource` automatically convert
+  pixels matching the GeoTIFF's declared nodata value (or its internal mask) to NaN
+
+An `ArraySource` without `crs`/`transform` must either match the grid shape exactly
+(pre-aligned) or be a single value; any other shape raises `ValueError` rather than
+being silently broadcast.
 
 ## Inference batching
 

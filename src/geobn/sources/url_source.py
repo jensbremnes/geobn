@@ -3,10 +3,10 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-import numpy as np
 import requests
 from rasterio.io import MemoryFile
 
+from .._io import read_first_band
 from .._types import RasterData
 from ..grid import GridSpec
 from ._base import DataSource
@@ -54,11 +54,7 @@ class URLSource(DataSource):
 
         with MemoryFile(response.content) as memfile:
             with memfile.open() as src:
-                array = src.read(1).astype(np.float32)
-                crs = src.crs.to_string()
-                transform = src.transform
-
-        result = RasterData(array=array, crs=crs, transform=transform)
+                result = read_first_band(src)
 
         # ── Save to cache ─────────────────────────────────────────────────
         if self._cache_dir is not None:

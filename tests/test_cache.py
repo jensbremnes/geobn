@@ -178,3 +178,13 @@ class TestCacheTransformNone:
         assert loaded is not None
         assert loaded.transform == t
         assert loaded.crs == "EPSG:4326"
+
+
+class TestCacheVersion:
+    def test_cache_version_is_part_of_the_key(self, tmp_path):
+        """Bumping _CACHE_VERSION must change the path so stale entries are not reused."""
+        key = {"url": "http://example.com/dem.tif"}
+        current = _make_cache_path(tmp_path, key)
+        with patch("geobn.sources._cache._CACHE_VERSION", 1):
+            old = _make_cache_path(tmp_path, key)
+        assert current != old

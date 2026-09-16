@@ -57,6 +57,13 @@ class TestAlignToGrid:
         assert result.shape == (10, 10)
         assert np.all(result == pytest.approx(7.5))
 
+    def test_no_crs_mismatched_shape_raises(self, reference_transform):
+        """A no-CRS array that is neither 1×1 nor grid-shaped must not be broadcast."""
+        data = RasterData(array=np.ones((4, 4), dtype=np.float32), crs=None, transform=None)
+        grid = GridSpec(crs="EPSG:4326", transform=reference_transform, shape=(10, 10))
+        with pytest.raises(ValueError, match="without CRS"):
+            align_to_grid(data, grid)
+
     def test_identity_passthrough(self, slope_array, reference_transform):
         data = RasterData(array=slope_array, crs="EPSG:4326", transform=reference_transform)
         grid = GridSpec(crs="EPSG:4326", transform=reference_transform, shape=(10, 10))

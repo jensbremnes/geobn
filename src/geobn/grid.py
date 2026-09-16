@@ -105,14 +105,23 @@ def align_to_grid(data: RasterData, grid: GridSpec) -> np.ndarray:
     Returns a (H, W) float32 array.  Pixels that fall outside *data*'s extent
     are filled with NaN.
 
-    A source with ``crs=None`` (ConstantSource) is broadcast directly.
-    A source that already matches the target grid is returned as-is.
+    A source with ``crs=None`` must either be a single value (ConstantSource),
+    which is broadcast, or already match the grid shape (pre-aligned
+    ArraySource), which is returned as-is.  Any other ``crs=None`` shape raises
+    ``ValueError``.  A source that already matches the target grid is returned
+    as-is.
     """
     if data.crs is None:
         if data.array.shape == grid.shape:
             # Pre-aligned array (ArraySource with no CRS) — return as-is
             _log.debug("Pre-aligned array — no reprojection needed")
             return data.array.astype(np.float32)
+        if data.array.size != 1:
+            raise ValueError(
+                f"Array without CRS has shape {data.array.shape}, but the grid "
+                f"shape is {grid.shape}.  Pass crs= and transform= to ArraySource "
+                "so it can be reprojected, or supply an array already aligned to the grid."
+            )
         # Scalar broadcast (ConstantSource)
         _log.debug("Broadcasting constant %g → shape %s", float(data.array.flat[0]), grid.shape)
         return np.full(grid.shape, float(data.array.flat[0]), dtype=np.float32)

@@ -4,7 +4,8 @@ Cache entries are stored as two files per result:
   {cache_dir}/{hash16}.npy   — float32 numpy array
   {cache_dir}/{hash16}.json  — {"crs": "...", "transform": [a,b,c,d,e,f]}
 
-The 16-char hex hash is SHA-256 of the JSON-serialised cache key dict.
+The 16-char hex hash is SHA-256 of the JSON-serialised cache key dict plus
+``_CACHE_VERSION``, so entries written with older semantics are never reused.
 """
 from __future__ import annotations
 
@@ -21,9 +22,17 @@ from .._types import RasterData
 _log = logging.getLogger(__name__)
 
 
+# Bump when the meaning of cached content changes, so stale entries are
+# refetched instead of silently reused.
+#   1 — original format
+#   2 — declared nodata / masked pixels stored as NaN
+_CACHE_VERSION = 2
+
+
 def _make_cache_path(cache_dir: str | Path, key: dict) -> Path:
+    versioned_key = {**key, "_cache_version": _CACHE_VERSION}
     digest = hashlib.sha256(
-        json.dumps(key, sort_keys=True).encode()
+        json.dumps(versioned_key, sort_keys=True).encode()
     ).hexdigest()[:16]
     return Path(cache_dir).expanduser() / f"{digest}.npy"
 
