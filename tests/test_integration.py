@@ -223,3 +223,27 @@ class TestFetchRawAndArraySource:
         assert probs.shape == (10, 10, 3)
         valid = ~np.isnan(probs[..., 0])
         np.testing.assert_allclose(probs[valid].sum(axis=-1), 1.0, atol=1e-5)
+
+    def test_raster_source_nodata_gives_nan_posterior(
+        self, bn, slope_array, reference_transform, tmp_path
+    ):
+        """Declared nodata in a GeoTIFF must yield NaN posteriors, not a binned sentinel."""
+        import rasterio
+
+        slope = slope_array.copy()
+        slope[2, 7] = -9999.0
+        path = tmp_path / "slope.tif"
+        with rasterio.open(
+            path, "w", driver="GTiff", height=10, width=10, count=1,
+            dtype="float32", crs="EPSG:4326", transform=reference_transform, nodata=-9999.0,
+        ) as dst:
+            dst.write(slope, 1)
+
+        bn.set_input("slope", geobn.RasterSource(path))
+        bn.set_input("rainfall", geobn.ConstantSource(50.0))
+        bn.set_discretization("slope", [0, 10, 30, 90], ["flat", "moderate", "steep"])
+        bn.set_discretization("rainfall", [0, 25, 75, 200], ["low", "medium", "high"])
+
+        probs = bn.infer(query=["fire_risk"]).probabilities["fire_risk"]
+        assert np.all(np.isnan(probs[2, 7]))
+        assert int(np.isnan(probs[..., 0]).sum()) == 1

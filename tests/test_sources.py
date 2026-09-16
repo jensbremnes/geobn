@@ -24,7 +24,11 @@ def small_grid() -> GridSpec:
     return GridSpec(crs="EPSG:4326", transform=transform, shape=(5, 5))
 
 
-def _make_geotiff_bytes(array: np.ndarray) -> bytes:
+def _make_geotiff_bytes(
+    array: np.ndarray,
+    nodata: float | None = None,
+    dtype: str = "float32",
+) -> bytes:
     """Build minimal in-memory GeoTIFF bytes using rasterio."""
     from rasterio.io import MemoryFile
     from rasterio.transform import from_bounds
@@ -37,12 +41,21 @@ def _make_geotiff_bytes(array: np.ndarray) -> bytes:
             height=H,
             width=W,
             count=1,
-            dtype="float32",
+            dtype=dtype,
             crs="EPSG:4326",
             transform=transform,
+            nodata=nodata,
         ) as dst:
-            dst.write(array.astype("float32"), 1)
+            dst.write(array.astype(dtype), 1)
         return memfile.read()
+
+
+def _mock_wcs_response(tiff_bytes: bytes) -> MagicMock:
+    mock_response = MagicMock()
+    mock_response.ok = True
+    mock_response.content = tiff_bytes
+    mock_response.elapsed.total_seconds.return_value = 0.1
+    return mock_response
 
 
 # ---------------------------------------------------------------------------
@@ -103,6 +116,61 @@ def test_raster_source_missing_file_raises(tmp_path):
     source = geobn.RasterSource(tmp_path / "nonexistent.tif")
     with pytest.raises(Exception):
         source.fetch()
+
+
+def test_raster_source_masks_declared_nodata(tmp_path):
+    """Pixels equal to the file's nodata value become NaN; others are intact."""
+    raw = np.array([[10.0, -9999.0], [-9999.0, 20.0]], dtype=np.float32)
+    path = tmp_path / "with_nodata.tif"
+    path.write_bytes(_make_geotiff_bytes(raw, nodata=-9999.0))
+
+    data = geobn.RasterSource(path).fetch()
+
+    assert data.array.dtype == np.float32
+    assert data.array[0, 0] == pytest.approx(10.0)
+    assert data.array[1, 1] == pytest.approx(20.0)
+    assert np.isnan(data.array[0, 1])
+    assert np.isnan(data.array[1, 0])
+
+
+def test_raster_source_masks_nodata_in_integer_file(tmp_path):
+    """Integer rasters are converted to float32 before nodata becomes NaN."""
+    raw = np.array([[1, -32768], [3, 4]], dtype=np.int16)
+    path = tmp_path / "int_nodata.tif"
+    path.write_bytes(_make_geotiff_bytes(raw, nodata=-32768, dtype="int16"))
+
+    data = geobn.RasterSource(path).fetch()
+
+    assert data.array.dtype == np.float32
+    assert np.isnan(data.array[0, 1])
+    np.testing.assert_array_equal(data.array[[0, 1, 1], [0, 0, 1]], [1.0, 3.0, 4.0])
+
+
+def test_raster_source_without_nodata_keeps_all_values(tmp_path):
+    raw = np.array([[10.0, -9999.0]], dtype=np.float32)
+    path = tmp_path / "no_nodata.tif"
+    path.write_bytes(_make_geotiff_bytes(raw))
+
+    data = geobn.RasterSource(path).fetch()
+
+    np.testing.assert_array_equal(data.array, raw)
+
+
+# ---------------------------------------------------------------------------
+# URLSource
+# ---------------------------------------------------------------------------
+
+def test_url_source_masks_declared_nodata():
+    raw = np.array([[5.0, -9999.0]], dtype=np.float32)
+    mock_response = MagicMock()
+    mock_response.raise_for_status = lambda: None
+    mock_response.content = _make_geotiff_bytes(raw, nodata=-9999.0)
+
+    with patch("requests.get", return_value=mock_response):
+        data = geobn.URLSource("https://example.com/dem.tif").fetch()
+
+    assert data.array[0, 0] == pytest.approx(5.0)
+    assert np.isnan(data.array[0, 1])
 
 
 # ---------------------------------------------------------------------------
@@ -213,3 +281,16 @@ def test_wcs_source_no_valid_range_passes_through(small_grid):
 
     assert np.isfinite(data.array[0, 0])   # 100 — intact
     assert data.array[0, 1] == pytest.approx(-9999.0)  # not masked
+
+
+def test_wcs_source_masks_declared_nodata_without_valid_range(small_grid):
+    """A nodata value declared in the returned GeoTIFF is masked automatically."""
+    raw = np.array([[100.0, -9999.0]], dtype=np.float32)
+    response = _mock_wcs_response(_make_geotiff_bytes(raw, nodata=-9999.0))
+
+    source = WCSSource(url="https://example.com/wcs", layer="test_layer", version="1.0.0")
+    with patch("requests.get", return_value=response):
+        data = source.fetch(grid=small_grid)
+
+    assert data.array[0, 0] == pytest.approx(100.0)
+    assert np.isnan(data.array[0, 1])

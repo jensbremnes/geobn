@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `save_precomputed(path)` and `load_precomputed(path)` methods on `GeoBayesianNetwork` — serialize the precomputed lookup table to a portable `.npz` file for offline→runtime deployment.
 
+### Fixed
+- `RasterSource`, `URLSource` and `WCSSource` now convert the GeoTIFF's declared nodata value (and internal masks) to NaN. Previously nodata sentinels such as −9999 were discretized as real values, producing confident but wrong posteriors.
+
+### Changed
+- Disk cache keys include a cache-format version. Existing `cache_dir` entries (which may contain unmasked nodata) are ignored and refetched once; old files can be deleted manually.
+
 ## [0.1.0] — 2026-03-11
 
 ### Added

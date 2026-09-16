@@ -24,14 +24,17 @@ client. It supports WCS 2.0.1, 1.1.1, and 1.0.0.
 
 ### Nodata masking with `valid_range`
 
-Pass `valid_range=(lo, hi)` to replace out-of-range sentinel values with NaN
-after fetching. This is the standard way to handle services that encode nodata
-as extreme numbers rather than a proper nodata band.
+If the returned GeoTIFF declares a nodata value, those pixels are converted to NaN
+automatically. Pass `valid_range=(lo, hi)` to additionally replace out-of-range
+sentinel values with NaN — needed for services that encode nodata as extreme
+numbers without declaring it.
 
 ### Disk caching
 
 Pass `cache_dir` to cache responses to disk. The cache key is a SHA-256 hash of the
-request URL and parameters. Corrupt or missing cache entries trigger a fresh request.
+request URL and parameters, plus an internal cache-format version (bumped when cached
+content semantics change, so outdated entries are refetched). Corrupt or missing cache
+entries trigger a fresh request.
 
 ### Recipes
 
