@@ -17,3 +17,7 @@ site/
 CLAUDE.md
 .claude/
 examples/tautra
+
+# Private research notes
+geobn_research_notes.md
+geobn_roadmap.md
