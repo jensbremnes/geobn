@@ -113,6 +113,35 @@ result = bn.infer(query=["fire_risk"])       # O(H×W) table lookup, zero pgmpy 
 
 ---
 
+## Point queries — look up the table without a grid
+
+Once a table exists (from `precompute()` or `load_precomputed()`), you can read
+posteriors for individual points directly, without sources, grids or `infer()`.
+Evidence values may be numbers (discretized with each node's breakpoints) or
+state names:
+
+```python
+bn.query_point({"slope": 35.0, "rainfall": "high"})
+# {'fire_risk': {'low': 0.2, 'medium': 0.3, 'high': 0.5}}
+```
+
+For many points at once, pass one sequence per node (lists, tuples or arrays of
+equal length K). Single values apply to every point:
+
+```python
+probs = bn.query_batch({
+    "slope": [5.0, 20.0, 45.0],
+    "rainfall": "high",
+})["fire_risk"]
+# (3, 3) float32 array, one row per point, states in BN order
+```
+
+A NaN value gives NaN probabilities for that point, the same as a NoData pixel
+in `infer()`. Every input node registered with `set_input()` needs a value;
+the table has no way to leave one out.
+
+---
+
 ## Combining both tiers
 
 The tiers stack naturally:
@@ -147,4 +176,6 @@ See the full method signatures in the [GeoBayesianNetwork](network.md) reference
 - [`precompute(query)`][geobn.GeoBayesianNetwork.precompute]
 - [`save_precomputed(path)`][geobn.GeoBayesianNetwork.save_precomputed]
 - [`load_precomputed(path)`][geobn.GeoBayesianNetwork.load_precomputed]
+- [`query_point(evidence)`][geobn.GeoBayesianNetwork.query_point]
+- [`query_batch(evidence)`][geobn.GeoBayesianNetwork.query_batch]
 - [`clear_cache()`][geobn.GeoBayesianNetwork.clear_cache]

@@ -1,5 +1,5 @@
-"""Tests for query_point / query_batch — point and trajectory lookups on the
-precomputed conditional table."""
+"""Tests for query_point / query_batch — point lookups on the precomputed
+conditional table."""
 
 from __future__ import annotations
 
@@ -68,9 +68,14 @@ def test_query_point_unknown_state(point_bn):
         point_bn.query_point({"slope": "vertical", "rainfall": "low"})
 
 
-def test_query_point_nan_evidence_raises(point_bn):
-    with pytest.raises(ValueError, match="NaN"):
-        point_bn.query_point({"slope": float("nan"), "rainfall": "low"})
+def test_query_point_nan_evidence_gives_nan(point_bn):
+    out = point_bn.query_point({"slope": float("nan"), "rainfall": "low"})
+    assert all(np.isnan(p) for p in out["fire_risk"].values())
+
+
+def test_query_point_rejects_sequence(point_bn):
+    with pytest.raises(ValueError, match="query_batch"):
+        point_bn.query_point({"slope": [5.0, 20.0], "rainfall": "low"})
 
 
 def test_query_point_unknown_query_node(point_bn):
@@ -105,6 +110,28 @@ def test_query_batch_nan_propagates_as_nan_row(point_bn):
     batch = point_bn.query_batch({"slope": slope, "rainfall": rain})["fire_risk"]
     assert np.all(np.isnan(batch[1]))
     assert np.all(np.isfinite(batch[[0, 2]]))
+
+
+def test_query_batch_accepts_lists_and_state_names(point_bn):
+    from_arrays = point_bn.query_batch(
+        {"slope": np.array([5.0, 45.0]), "rainfall": np.array([10.0, 250.0])}
+    )["fire_risk"]
+    from_lists = point_bn.query_batch({"slope": [5.0, 45.0], "rainfall": (10.0, 250.0)})["fire_risk"]
+    from_states = point_bn.query_batch(
+        {"slope": ["flat", "steep"], "rainfall": np.array(["low", "high"])}
+    )["fire_risk"]
+    np.testing.assert_array_equal(from_lists, from_arrays)
+    np.testing.assert_array_equal(from_states, from_arrays)
+
+
+def test_query_batch_mixed_numbers_and_states_raises(point_bn):
+    with pytest.raises(ValueError, match="not a mix"):
+        point_bn.query_batch({"slope": [5.0, "steep"], "rainfall": "low"})
+
+
+def test_query_batch_unknown_state_in_sequence(point_bn):
+    with pytest.raises(ValueError, match="vertical"):
+        point_bn.query_batch({"slope": ["flat", "vertical"], "rainfall": "low"})
 
 
 def test_query_batch_mismatched_lengths(point_bn):
