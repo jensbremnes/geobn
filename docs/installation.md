@@ -1,6 +1,6 @@
 # Installation
 
-geobn requires **Python ≥ 3.13**.
+geobn requires Python 3.11 or newer.
 
 ## Install
 
@@ -8,8 +8,8 @@ geobn requires **Python ≥ 3.13**.
 pip install geobn
 ```
 
-All features — GeoTIFF I/O, interactive maps, xarray output, and all built-in data
-sources — are included in the standard install.
+The standard install includes everything: GeoTIFF I/O, interactive maps, xarray
+output and all built-in data sources.
 
 ## Development install
 
@@ -19,11 +19,9 @@ cd geobn
 pip install -e ".[dev]"
 ```
 
-The `dev` extra pulls in pytest.
+The `dev` extra adds pytest and pytest-cov.
 
-## Docs install
-
-To build the documentation locally:
+## Building the docs
 
 ```bash
 pip install -e ".[docs]"

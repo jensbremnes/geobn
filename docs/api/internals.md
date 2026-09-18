@@ -1,8 +1,8 @@
 # Internals
 
-!!! note "For contributors, not end users"
-    This page documents the internal modules used by `GeoBayesianNetwork` and the
-    data sources. Normal users interact exclusively with the public API described in
+!!! note "For contributors"
+    This page covers the internal modules behind `GeoBayesianNetwork` and the data
+    sources. As a user you only need the public API in
     [GeoBayesianNetwork](network.md), [InferenceResult](result.md), and the
     [Sources](sources/index.md) pages.
 

@@ -1,17 +1,12 @@
-# Lyngen Alps — Avalanche Risk
+# Lyngen Alps avalanche risk
 
 **Location:** Lyngen Alps, Tromsø county, northern Norway (69.35°N–69.75°N, 19.8°E–21.0°E)
 
-This example demonstrates pixel-wise avalanche risk inference over real Norwegian terrain
-using a free WCS endpoint. No credentials are required.
-
-## What it demonstrates
-
-- Fetching a real 10 m Digital Terrain Model from Kartverket's WCS
-- Deriving slope angle and aspect analytically from the DEM
-- Using `ConstantSource` for spatially-uniform weather inputs
-- Encoding domain knowledge (terrain + weather) in a 2-level BN
-- Exploring different weather scenarios by changing two scalar constants
+This example maps avalanche risk over real Norwegian terrain. It downloads the 10 m
+terrain model from Kartverket's free WCS service (no credentials needed) and computes
+slope angle and aspect from it. Weather enters as two constants, snowfall and
+temperature, so you can try other scenarios by changing two numbers. The network has
+two levels: a terrain factor and a weather factor, combined into avalanche risk.
 
 ## Bayesian network structure
 
@@ -63,8 +58,8 @@ dem = bn.fetch_raw(geobn.WCSSource(
 ))  # (80, 240) float32, NaN at sea
 ```
 
-The terrain is cached after the first run. On subsequent runs it loads from
-`examples/lyngen_alps/cache/` without making a network request.
+The terrain is cached on the first run. Later runs load it from
+`examples/lyngen_alps/cache/` without a network request.
 
 ### 3. Derive slope and aspect
 
@@ -74,7 +69,7 @@ slope_deg, sun_exposure = compute_slope_aspect(dem)
 # sun_exposure: float32 (H, W), direction the slope faces: 0=N, 1=E, 2=W, 3=S
 ```
 
-The pixel-metre conversion accounts for the geographic CRS:
+Pixel sizes are converted to metres for the geographic CRS:
 
 ```python
 m_per_deg_lat = 111_320.0
@@ -84,9 +79,9 @@ dz_dcol = _nan_gradient(dem, pixel_lon_m, axis=1)
 ```
 
 `_nan_gradient` uses central differences like `np.gradient`, but falls back to a
-one-sided difference next to sea or nodata instead of treating those pixels as
-0 m, which would create fake cliffs along the coast.  Aspect is the direction of
-steepest *descent*, i.e. the way the slope faces.
+one-sided difference next to sea or nodata. Treating those pixels as 0 m would
+create fake cliffs along the coast. Aspect is the direction of steepest descent,
+which is the way the slope faces.
 
 ### 4. Load the BN and wire inputs
 
@@ -119,10 +114,10 @@ result.to_geotiff(OUT_DIR)
 
 ## Key outputs
 
-- **`output/map.html`** — interactive Leaflet map with risk probability overlay,
-  entropy overlay, slope angle overlay, and layer switcher
-- **`output/avalanche_risk.tif`** — 4-band GeoTIFF:
-  Band 1 P(low), Band 2 P(medium), Band 3 P(high), Band 4 entropy
+- `output/map.html`: interactive Leaflet map with layers for risk probability,
+  entropy and slope angle
+- `output/avalanche_risk.tif`: 4-band GeoTIFF with P(low), P(medium), P(high) and
+  entropy
 
 ## How to run
 
@@ -135,9 +130,9 @@ python examples/lyngen_alps/run_example.py
 Edit the two constants at the top of `run_example.py`:
 
 ```python
-RECENT_SNOW_CM = 30.0   # cm  — heavy recent snowfall
-AIR_TEMP_C     = -5.0   # °C  — cold but not extreme
+RECENT_SNOW_CM = 30.0   # cm, heavy recent snowfall
+AIR_TEMP_C     = -5.0   # °C, cold but not extreme
 ```
 
-Try `RECENT_SNOW_CM = 5.0` (light snow) and `AIR_TEMP_C = 0.5` (warming/wet) to
-see how the risk distribution changes across the terrain.
+With `RECENT_SNOW_CM = 5.0` (light snow) and `AIR_TEMP_C = 0.5` (warming, wet snow)
+the risk map looks quite different.

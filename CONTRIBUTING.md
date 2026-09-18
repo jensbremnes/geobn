@@ -1,25 +1,27 @@
 # Contributing
 
-Bug reports, new data sources, documentation fixes, and feature ideas are all welcome — feel free to open an issue or PR.
+Bug reports, new data sources, doc fixes and feature ideas are all welcome. Open an issue or a pull request.
 
 ## Setup
 
 ```bash
 git clone https://github.com/jensbremnes/geobn.git
 cd geobn
-uv pip install -e ".[dev]"
-uv run pytest tests/ -v
+uv sync --frozen
+uv run --frozen --with pytest python -m pytest tests/
 ```
 
-## Before submitting a PR
+Without uv, run `pip install -e ".[dev]"` and then `pytest tests/`.
 
-- All tests pass (`uv run pytest tests/ -v`)
-- New behaviour is covered by tests
-- Docs updated if the public API changed
+## Before opening a PR
+
+- The tests pass.
+- New behaviour has tests.
+- The docs are updated if the public API changed.
 
 ## Adding a new data source
 
-1. Create `src/geobn/sources/my_source.py` following the `DataSource` ABC.
-2. Export from `src/geobn/sources/__init__.py` and `src/geobn/__init__.py`.
+1. Create `src/geobn/sources/my_source.py`, subclassing `DataSource`.
+2. Export it from `src/geobn/sources/__init__.py` and `src/geobn/__init__.py`.
 3. Add tests to `tests/test_sources.py`.
-4. Add a `:::` mkdocstrings directive in the appropriate `docs/api/sources/` page.
+4. Add a `:::` mkdocstrings directive to the right page in `docs/api/sources/`.

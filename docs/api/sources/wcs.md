@@ -1,4 +1,4 @@
-# Generic WCS Source
+# WCS source
 
 ## WCSSource
 
@@ -17,9 +17,9 @@ client. It supports WCS 2.0.1, 1.1.1, and 1.0.0.
 ...&SUBSET=Lat(lat_min,lat_max)&SUBSET=Long(lon_min,lon_max)
 ```
 
-The bounds are in EPSG:4326 (`SUBSETTINGCRS`). `Lat`/`Long` are the default axis
-labels; servers that name the axes differently (e.g. `lat`/`lon` or `y`/`x`) reject
-this request. Pass `axis_labels=(lon_label, lat_label)` to match the server:
+The bounds are in EPSG:4326 (`SUBSETTINGCRS`). The default axis labels are `Lat`/`Long`.
+Servers that name the axes differently (e.g. `lat`/`lon` or `y`/`x`) reject
+the request, so pass `axis_labels=(lon_label, lat_label)` to match the server:
 
 ```python
 source = geobn.WCSSource(url, layer="my_coverage", axis_labels=("lon", "lat"))
@@ -37,20 +37,20 @@ The axis names are listed in the server's DescribeCoverage response.
 
 If the returned GeoTIFF declares a nodata value, those pixels are converted to NaN
 automatically. Pass `valid_range=(lo, hi)` to additionally replace out-of-range
-sentinel values with NaN — needed for services that encode nodata as extreme
-numbers without declaring it.
+sentinel values with NaN. Some services encode nodata as extreme numbers without
+declaring it, and need this.
 
 ### Disk caching
 
 Pass `cache_dir` to cache responses to disk. The cache key is a SHA-256 hash of the
 request URL and parameters (bounding box, output size, format, axis labels, extra
-subsets and `valid_range`), plus an internal cache-format version (bumped when cached
-content semantics change, so outdated entries are refetched). Corrupt or missing cache
-entries trigger a fresh request.
+subsets and `valid_range`), plus an internal cache-format version. The version is
+bumped when the meaning of cached content changes, so old entries are fetched again.
+A corrupt or missing cache entry also triggers a new request.
 
 ### Recipes
 
-**Kartverket Norwegian DTM (10 m):**
+Kartverket Norwegian DTM (10 m):
 
 ```python
 source = geobn.WCSSource(
@@ -64,7 +64,7 @@ source = geobn.WCSSource(
 bn.set_input("elevation", source)
 ```
 
-**EMODnet European Bathymetry:**
+EMODnet European bathymetry:
 
 ```python
 source = geobn.WCSSource(
@@ -77,7 +77,7 @@ source = geobn.WCSSource(
 bn.set_input("depth", source)
 ```
 
-**EMODnet Shipping Density:**
+EMODnet shipping density:
 
 ```python
 source = geobn.WCSSource(

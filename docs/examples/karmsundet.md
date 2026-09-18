@@ -1,19 +1,17 @@
-# Karmsundet — USV Maritime Risk
+# Karmsundet USV risk
 
 **Location:** Karmsundet strait, Haugesund, western Norway (59.25°N–59.55°N, 5.15°E–5.55°E)
 
-Karmsundet is a narrow tidal channel between Karmøy island and the mainland — one of Norway's
-busiest coastal waterways for commercial shipping, fishing vessels, and recreational traffic.
-This example demonstrates real-time maritime risk inference for an unmanned surface vessel (USV)
-operating in the area.
+Karmsundet is a narrow tidal channel between Karmøy and the mainland, and one of
+Norway's busiest coastal waterways for shipping, fishing and leisure boats. This
+example maps the operating risk for an unmanned surface vessel (USV) in the strait.
 
-## What it demonstrates
-
-- Fetching bathymetry from the **EMODnet** global WCS (no credentials required)
-- Sampling **live Met.no forecasts** (wave height, wind, current, fog) via `PointGridSource`
-- Using a pre-processed **AIS traffic density** raster from Kystverket open data
-- A **3-layer BN** covering grounding risk, collision risk, and navigation difficulty
-- **Tier-2 precompute** (`bn.precompute()`) for sub-second inference on 1,215 evidence combinations
+Bathymetry comes from the EMODnet WCS (no credentials needed). Wave height, wind,
+current and fog are sampled from live MET Norway forecasts with `PointGridSource`, and
+vessel traffic comes from an AIS density raster built from Kystverket open data. The
+network has three layers, with grounding risk, collision risk and navigation difficulty
+feeding into the USV risk. `bn.precompute()` solves all 1,215 evidence combinations up
+front, so inference takes less than a second.
 
 ## Bayesian network structure
 
@@ -33,8 +31,8 @@ current_speed ────────────────┘
 Six root nodes (evidence inputs), three intermediate nodes, one query node
 (`usv_risk`) with states `{low, medium, high}`.
 
-Note that `wave_height` and `current_speed` are parents of two intermediate
-nodes each — this is valid in pgmpy and requires no special handling.
+`wave_height` and `current_speed` are each parents of two intermediate nodes. pgmpy
+handles this without anything special.
 
 ## Data sources
 
@@ -76,7 +74,7 @@ depth = -raw_depth        # positive depth below surface
 depth[depth < 0] = np.nan  # land pixels → NaN (no inference)
 ```
 
-Cached after the first run — subsequent runs load from `examples/karmsundet/cache/`.
+The data is cached on the first run and loaded from `examples/karmsundet/cache/` after that.
 
 ### 3. Sample live weather via PointGridSource
 
@@ -94,8 +92,8 @@ bn.set_input("wave_height", geobn.PointGridSource(fn=_make_ocean_fn("sea_surface
 bn.set_input("current_speed", geobn.PointGridSource(fn=_make_ocean_fn("sea_water_speed"), sample_points=5))
 ```
 
-Each `PointGridSource` makes 25 API calls (5×5 grid), then `align_to_grid()` bilinearly
-resamples the coarse result to the full 150×200 pixel grid.
+Each `PointGridSource` makes 25 API calls (a 5×5 grid). `align_to_grid()` then
+resamples the coarse result bilinearly onto the full 150×200 pixel grid.
 
 ### 4. Wire all inputs and set discretization
 
@@ -114,13 +112,13 @@ bn.set_discretization("fog_fraction", [0.0, 0.2, 0.6, 1.01])  # 1.01 ensures 1.0
 ### 5. Precompute and infer
 
 ```python
-bn.precompute(query=["usv_risk"])   # 1,215 unique combos — sub-second
+bn.precompute(query=["usv_risk"])   # 1,215 combinations, under a second
 
 result = bn.infer(query=["usv_risk"])
 ```
 
-After `precompute()`, `infer()` uses O(H×W) fancy-index table lookup — zero pgmpy
-calls regardless of grid size.
+After `precompute()`, `infer()` is an O(H×W) table lookup and makes no pgmpy calls,
+whatever the grid size.
 
 ### 6. Scalar risk score and export
 
@@ -135,11 +133,10 @@ result.show_map(OUT_DIR, filename="usv_risk_map.html",
 
 ## Key outputs
 
-- **`output/usv_risk_map.html`** — interactive Leaflet map with USV risk probability,
-  entropy, risk score, and depth overlays
-- **`output/usv_risk.tif`** — 4-band GeoTIFF:
-  Band 1 P(low), Band 2 P(medium), Band 3 P(high), Band 4 entropy
-- **`output/risk_score.tif`** — scalar risk score in the range 10–90
+- `output/usv_risk_map.html`: interactive Leaflet map with layers for USV risk
+  probability, entropy, risk score and depth
+- `output/usv_risk.tif`: 4-band GeoTIFF with P(low), P(medium), P(high) and entropy
+- `output/risk_score.tif`: scalar risk score between 10 and 90
 
 ## AIS traffic density
 
@@ -154,8 +151,8 @@ To generate a real raster from Kystverket open data:
 uv run python examples/karmsundet/create_ais_density.py aisdata.csv 30
 ```
 
-This produces `data/ais_density_karmsundet.tif` — a float32 GeoTIFF with traffic
-density in encounters/km²/day on the same 150×200 grid.
+This writes `data/ais_density_karmsundet.tif`, a float32 GeoTIFF with traffic density
+in encounters/km²/day on the same 150×200 grid.
 
 ## How to run
 
@@ -163,5 +160,5 @@ density in encounters/km²/day on the same 150×200 grid.
 uv run python examples/karmsundet/run_example.py
 ```
 
-The bathymetry is cached on first run. The Met.no forecasts are fetched live on
-every run (~100 API calls total, taking roughly 5–10 seconds).
+The bathymetry is cached on the first run. The MET Norway forecasts are fetched on
+every run, which is about 100 API calls and takes 5–10 seconds.
