@@ -178,8 +178,10 @@ posteriors.
 From an `InferenceResult` you can:
 
 - `result.entropy("node")` — Shannon entropy map (bits), shape (H, W)
-- `result.to_geotiff("out/")` — write multi-band GeoTIFFs
-- `result.to_xarray()` — return an xarray Dataset
+- summary maps: `expected_value`, `std`, `mode`, `mode_probability`, `exceedance`,
+  `ignorance`, `quantile` (see [InferenceResult](api/result.md#summary-layers))
+- `result.to_geotiff("out/", layers={...})` — write multi-band GeoTIFFs, plus optional extra layers
+- `result.to_xarray(layers={...})` — return an xarray Dataset
 - `result.show_map()` — interactive Leaflet map
 
 ## Real-time / repeated inference

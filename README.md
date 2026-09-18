@@ -139,6 +139,7 @@ result = bn.infer(query=["avalanche_risk"])
 ```python
 probs = result.probabilities["avalanche_risk"]  # (H, W, n_states) — one band per state
 ent   = result.entropy("avalanche_risk")         # (H, W) — Shannon entropy in bits
+p_hi  = result.exceedance("avalanche_risk", "high")  # (H, W) — P(risk >= high)
 
 # State names come directly from the .bif file
 for i, state in enumerate(result.state_names["avalanche_risk"]):

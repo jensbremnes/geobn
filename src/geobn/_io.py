@@ -29,6 +29,7 @@ def write_geotiff(
     transform: Affine,
     path: str | Path,
     nodata: float = float("nan"),
+    descriptions: list[str] | None = None,
 ) -> None:
     """Write a multi-band float32 GeoTIFF.
 
@@ -44,6 +45,8 @@ def write_geotiff(
         Output file path.
     nodata:
         NoData value written into the file metadata.
+    descriptions:
+        Optional band descriptions, one per band.
     """
     path = Path(path)
     bands, H, W = array.shape
@@ -61,3 +64,6 @@ def write_geotiff(
         nodata=nodata,
     ) as dst:
         dst.write(array.astype(np.float32))
+        if descriptions is not None:
+            for i, desc in enumerate(descriptions, start=1):
+                dst.set_band_description(i, desc)
