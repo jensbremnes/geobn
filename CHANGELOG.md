@@ -11,14 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `save_precomputed(path)` and `load_precomputed(path)` methods on `GeoBayesianNetwork` — serialize the precomputed lookup table to a portable `.npz` file for offline→runtime deployment.
 - `query_point(evidence)` and `query_batch(evidence)` on `GeoBayesianNetwork`: posteriors for single points or batches of points, looked up directly in the precomputed table without a grid. Evidence may be numbers or state names; NaN gives NaN probabilities.
 - `set_discretization(..., out_of_range="clip" | "nan")`: choose whether values outside `[breakpoints[0], breakpoints[-1]]` are clipped to the first/last state (default, unchanged behaviour) or treated as NoData.
+- `save_precomputed` stores a format version, the geobn version, a hash of the model (structure, state names, CPD values), the BN state names and each input's discretization. `load_precomputed` checks all of these and raises `ValueError` if the table was built from a different model or with a different discretization.
+- `load_precomputed` restores the saved discretizations for inputs that have none set, so a runtime machine only needs to register the inputs.
 
 ### Fixed
+- Discretization labels given in a different order from the BN's states (e.g. `["high", "medium", "low"]` for a node defined as `low, medium, high`) gave wrong posteriors from the precomputed table (`infer` after `precompute`, `query_point`, `query_batch`). The pgmpy path was correct. Indices are now mapped to the BN's state order in every path.
 - `RasterSource`, `URLSource` and `WCSSource` now convert the GeoTIFF's declared nodata value (and internal masks) to NaN. Previously nodata sentinels such as −9999 were discretized as real values, producing confident but wrong posteriors.
 - An `ArraySource` without CRS whose shape does not match the grid now raises `ValueError`. Previously it was silently broadcast from its first value.
 - `docs/concepts.md` wrongly said that values outside the breakpoint range become NaN; they are clipped unless `out_of_range="nan"` is set.
 - Automatic reference-grid selection now compares pixel sizes in metres instead of CRS units. Previously a 0.001° WGS84 source (~80 m) was chosen over a 10 m UTM source, downsampling the finer data.
 
 ### Changed
+- `load_precomputed` no longer requires inputs to be registered in the same order as when the table was saved; the table axes are reordered by node name. Tables saved by older versions still load, with a `UserWarning`.
 - Disk cache keys include a cache-format version. Existing `cache_dir` entries (which may contain unmasked nodata) are ignored and refetched once; old files can be deleted manually.
 
 ## [0.1.0] — 2026-03-11
