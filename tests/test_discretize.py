@@ -70,3 +70,28 @@ class TestDiscretizeArray:
         arr = np.array([[29.999]])
         idx = discretize_array(arr, self.spec)
         assert idx[0, 0] == 1  # "moderate"
+
+
+class TestOutOfRange:
+    breakpoints = [0, 10, 30, 90]
+    labels = ["flat", "moderate", "steep"]
+
+    def test_default_is_clip(self):
+        spec = DiscretizationSpec(self.breakpoints, self.labels)
+        assert spec.out_of_range == "clip"
+        idx = discretize_array(np.array([-5.0, 100.0]), spec)
+        np.testing.assert_array_equal(idx, [0, 2])
+
+    def test_nan_mode_marks_outside_values(self):
+        spec = DiscretizationSpec(self.breakpoints, self.labels, out_of_range="nan")
+        idx = discretize_array(np.array([-5.0, 0.0, 50.0, 90.0, 100.0]), spec)
+        np.testing.assert_array_equal(idx, [-1, 0, 2, 2, -1])
+
+    def test_nan_mode_keeps_nan_as_minus_one(self):
+        spec = DiscretizationSpec(self.breakpoints, self.labels, out_of_range="nan")
+        idx = discretize_array(np.array([[np.nan, 5.0]]), spec)
+        np.testing.assert_array_equal(idx, [[-1, 0]])
+
+    def test_invalid_mode_raises(self):
+        with pytest.raises(ValueError, match="out_of_range"):
+            DiscretizationSpec(self.breakpoints, self.labels, out_of_range="drop")

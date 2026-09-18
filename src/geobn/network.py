@@ -104,6 +104,7 @@ class GeoBayesianNetwork:
         node: str,
         breakpoints: list[float],
         labels: list[str] | None = None,
+        out_of_range: str = "clip",
     ) -> None:
         """Define how continuous values for *node* are mapped to BN states.
 
@@ -114,19 +115,30 @@ class GeoBayesianNetwork:
             :meth:`set_input`).
         breakpoints:
             Monotonically increasing list of ``len(labels) + 1`` boundary
-            values.  The first and last are the documented range limits; the
-            interior values define the bin edges.
+            values.  The interior values define the bin edges; the first and
+            last define the valid range ``[first, last]`` used by
+            *out_of_range*.
         labels:
             State names that **exactly** match the state names in the BN.
             If omitted, state names are read from the BN node in their
             definition order — the breakpoints must then produce exactly
             as many bins as the node has states.
+        out_of_range:
+            What to do with values outside ``[breakpoints[0], breakpoints[-1]]``:
+
+            - ``"clip"`` (default): assign them to the first or last state.
+            - ``"nan"``: treat them as NoData, so the pixel (or point) gets
+              NaN probabilities.
         """
         self._validate_node_exists(node)
         if labels is None:
             cpd = self._model.get_cpds(node)
             labels = list(cpd.state_names[node])
-        spec = DiscretizationSpec(breakpoints=list(breakpoints), labels=list(labels))
+        spec = DiscretizationSpec(
+            breakpoints=list(breakpoints),
+            labels=list(labels),
+            out_of_range=out_of_range,
+        )
         self._validate_labels_match_bn(node, spec.labels)
         self._discretizations[node] = spec
         # If this node was frozen and cached, the cached array used the old spec

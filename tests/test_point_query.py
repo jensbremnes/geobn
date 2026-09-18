@@ -73,6 +73,16 @@ def test_query_point_nan_evidence_gives_nan(point_bn):
     assert all(np.isnan(p) for p in out["fire_risk"].values())
 
 
+def test_query_point_out_of_range_nan(point_bn):
+    point_bn.set_discretization(
+        "slope", [0, 10, 30, 90], ["flat", "moderate", "steep"], out_of_range="nan"
+    )
+    out = point_bn.query_point({"slope": 95.0, "rainfall": "low"})
+    assert all(np.isnan(p) for p in out["fire_risk"].values())
+    inside = point_bn.query_point({"slope": 90.0, "rainfall": "low"})
+    assert inside == point_bn.query_point({"slope": "steep", "rainfall": "low"})
+
+
 def test_query_point_rejects_sequence(point_bn):
     with pytest.raises(ValueError, match="query_batch"):
         point_bn.query_point({"slope": [5.0, 20.0], "rainfall": "low"})

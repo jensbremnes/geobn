@@ -70,6 +70,42 @@ class TestEndToEnd:
         assert np.all(np.isnan(result.probabilities["fire_risk"][3, 3, :]))
         assert not np.any(np.isnan(result.probabilities["fire_risk"][0, 0, :]))
 
+    def test_out_of_range_nan(self, bn, slope_array, rainfall_array, reference_transform):
+        """out_of_range="nan" → NaN only where the value is outside the breakpoints."""
+        slope = slope_array.copy()
+        slope[2, 5] = 120.0  # above the last breakpoint (90)
+        bn.set_input(
+            "slope",
+            geobn.ArraySource(slope, crs="EPSG:4326", transform=reference_transform),
+        )
+        bn.set_input(
+            "rainfall",
+            geobn.ArraySource(rainfall_array, crs="EPSG:4326", transform=reference_transform),
+        )
+        bn.set_discretization(
+            "slope", [0, 10, 30, 90], ["flat", "moderate", "steep"], out_of_range="nan"
+        )
+        bn.set_discretization("rainfall", [0, 25, 75, 200], ["low", "medium", "high"])
+
+        probs = bn.infer(query=["fire_risk"]).probabilities["fire_risk"]
+        nan_pixels = np.isnan(probs[..., 0])
+        assert nan_pixels[2, 5]
+        assert nan_pixels.sum() == 1
+
+    def test_out_of_range_clip_is_default(self, bn, slope_array, reference_transform):
+        slope = slope_array.copy()
+        slope[2, 5] = 120.0
+        bn.set_input(
+            "slope",
+            geobn.ArraySource(slope, crs="EPSG:4326", transform=reference_transform),
+        )
+        bn.set_input("rainfall", geobn.ConstantSource(50.0))
+        bn.set_discretization("slope", [0, 10, 30, 90], ["flat", "moderate", "steep"])
+        bn.set_discretization("rainfall", [0, 25, 75, 200], ["low", "medium", "high"])
+
+        probs = bn.infer(query=["fire_risk"]).probabilities["fire_risk"]
+        assert not np.isnan(probs).any()
+
     def test_set_grid_override(self, bn, slope_array, reference_transform):
         """set_grid() overrides the reference grid derived from the first input."""
         # slope is 10×10 at 0.1°; override to 5×5 at 0.2°
