@@ -43,6 +43,13 @@ class WCSSource(DataSource):
         Additional ``SUBSET=`` values appended to the WCS 2.0 request (e.g.
         ``['time("2023-01-01T00:00:00.000Z")']`` for time-aware coverages).
         Ignored for WCS 1.x requests.
+    axis_labels:
+        Names of the longitude and latitude axes used in the WCS 2.0
+        ``SUBSET=`` parameters, as ``(lon_label, lat_label)``.  The default
+        ``("Long", "Lat")`` matches the EPSG:4326 axis abbreviations; some
+        servers use e.g. ``("lon", "lat")`` or ``("x", "y")`` instead.  The
+        bounds are always given in EPSG:4326 (``SUBSETTINGCRS``).  Ignored
+        for WCS 1.x requests.
     valid_range:
         Optional ``(lo, hi)`` tuple. After fetching, pixels outside this
         range are set to NaN.  Use this to mask out nodata sentinels that
@@ -63,7 +70,17 @@ class WCSSource(DataSource):
         cache_dir: str | Path | None = None,
         extra_subsets: list[str] | None = None,
         valid_range: tuple[float, float] | None = None,
+        axis_labels: tuple[str, str] = ("Long", "Lat"),
     ) -> None:
+        if (
+            isinstance(axis_labels, str)
+            or len(axis_labels) != 2
+            or not all(isinstance(a, str) and a for a in axis_labels)
+        ):
+            raise ValueError(
+                "axis_labels must be two non-empty strings "
+                f"(lon_label, lat_label); got {axis_labels!r}"
+            )
         self._url = url
         self._layer = layer
         self._version = version
@@ -72,6 +89,7 @@ class WCSSource(DataSource):
         self._cache_dir = Path(cache_dir).expanduser() if cache_dir is not None else None
         self._extra_subsets = extra_subsets or []
         self._valid_range = valid_range
+        self._axis_labels = tuple(axis_labels)
 
     # ------------------------------------------------------------------
     # DataSource interface
@@ -91,12 +109,7 @@ class WCSSource(DataSource):
         # ── Cache check ───────────────────────────────────────────────────
         if self._cache_dir is not None:
             from ._cache import _load_cached, _make_cache_path, _save_cached  # noqa: PLC0415
-            cache_key = {
-                "url": self._url, "layer": self._layer, "version": self._version,
-                "lon_min": round(lon_min, 8), "lat_min": round(lat_min, 8),
-                "lon_max": round(lon_max, 8), "lat_max": round(lat_max, 8),
-                "H": H, "W": W,
-            }
+            cache_key = self._cache_key(lon_min, lat_min, lon_max, lat_max, H, W)
             cache_path = _make_cache_path(self._cache_dir, cache_key)
             cached = _load_cached(cache_path)
             if cached is not None:
@@ -142,6 +155,33 @@ class WCSSource(DataSource):
     # Internal helpers
     # ------------------------------------------------------------------
 
+    def _cache_key(
+        self,
+        lon_min: float,
+        lat_min: float,
+        lon_max: float,
+        lat_max: float,
+        H: int,
+        W: int,
+    ) -> dict:
+        key = {
+            "url": self._url, "layer": self._layer, "version": self._version,
+            "lon_min": round(lon_min, 8), "lat_min": round(lat_min, 8),
+            "lon_max": round(lon_max, 8), "lat_max": round(lat_max, 8),
+            "H": H, "W": W,
+        }
+        # Options that change the request or the cached array.  Added only
+        # when not at their default, so existing cache entries stay valid.
+        if self._format != "image/tiff":
+            key["format"] = self._format
+        if self._axis_labels != ("Long", "Lat"):
+            key["axis_labels"] = list(self._axis_labels)
+        if self._extra_subsets:
+            key["extra_subsets"] = list(self._extra_subsets)
+        if self._valid_range is not None:
+            key["valid_range"] = [float(v) for v in self._valid_range]
+        return key
+
     def _build_params_v2(
         self,
         lon_min: float,
@@ -149,9 +189,10 @@ class WCSSource(DataSource):
         lon_max: float,
         lat_max: float,
     ) -> dict:
+        lon_label, lat_label = self._axis_labels
         subsets = [
-            f"Lat({lat_min},{lat_max})",
-            f"Long({lon_min},{lon_max})",
+            f"{lat_label}({lat_min},{lat_max})",
+            f"{lon_label}({lon_min},{lon_max})",
         ] + list(self._extra_subsets)
         return {
             "SERVICE": "WCS",
