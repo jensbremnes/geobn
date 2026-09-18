@@ -14,7 +14,13 @@ from pgmpy.models import DiscreteBayesianNetwork
 
 from .discretize import DiscretizationSpec, discretize_array
 from .grid import GridSpec, _pixel_size_m, align_to_grid
-from .inference import build_conditional_table, run_inference, run_inference_from_table
+from .inference import (
+    _query_marginals,
+    _root_priors,
+    build_conditional_table,
+    run_inference,
+    run_inference_from_table,
+)
 from .result import InferenceResult
 from .sources._base import DataSource
 
@@ -349,14 +355,15 @@ class GeoBayesianNetwork:
                 n_q = len(query_state_names[qnode])
                 tables[qnode] = np.zeros(n_states_per_node + [n_q], dtype=np.float32)
 
+            root_priors = _root_priors(self._model)
             for idx_combo in itertools.product(*[range(k) for k in n_states_per_node]):
                 evidence = {
                     node_order[i]: state_names_per_node[node_order[i]][idx_combo[i]]
                     for i in range(len(node_order))
                 }
-                for qnode in query:
-                    factor = ve.query([qnode], evidence=evidence, show_progress=False)
-                    tables[qnode][idx_combo] = factor.values.astype(np.float32)
+                marginals = _query_marginals(ve, self._model, query, evidence, root_priors)
+                for qnode in tables:
+                    tables[qnode][idx_combo] = marginals[qnode]
 
         self._inference_table = tables
         self._evidence_nodes = node_order

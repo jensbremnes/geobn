@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `load_precomputed` restores the saved discretizations for inputs that have none set, so a runtime machine only needs to register the inputs.
 
 ### Fixed
+- Evidence with probability zero (e.g. an input observed in a state with prior 0) now gives NaN for every query node on every inference path (per-combination loop, joint table, `precompute()` and its fallback). Previously the per-combination loop could return probabilities for query nodes that pgmpy pruned away from the contradiction, and for children of a root observed in a zero-prior state.
 - `WCSSource` disk cache: the cache key now includes `extra_subsets`, `format`, `valid_range` and `axis_labels`. Previously, e.g. two time steps of the same coverage (different `extra_subsets`) shared one cache entry, so the second returned the first one's data. Cache entries for requests that use none of these options stay valid.
 - `GridSpec.extent_wgs84()` now transforms 21 points along each grid edge instead of only the 4 corners, so `WCSSource` and `PointGridSource` no longer request a box that is too small for large projected grids (edges curve in lon/lat; up to ~12 km was missed on a 1000 km grid). A grid that contains a pole now gives a box reaching that pole and spanning all longitudes.
 - Lyngen example: slope no longer treats sea/nodata as 0 m elevation, which created fake cliffs along the coast (a flat coastal plateau got ~38°). Differences next to nodata are now one-sided. Aspect classes now use the direction the slope faces; north/south and east/west were swapped.
@@ -26,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automatic reference-grid selection now compares pixel sizes in metres instead of CRS units. Previously a 0.001° WGS84 source (~80 m) was chosen over a 10 m UTM source, downsampling the finer data.
 
 ### Changed
+- Multi-node `infer()` is much faster for large query sets (#18). pgmpy builds the full joint over all query nodes even with `joint=False`, so one call for 19 query nodes (192M cells) took ~10 s per evidence combination. Query nodes are now requested in one call only when their joint table has at most 20,000 cells, and one by one otherwise (32 ms in the same case). The `precompute()` fallback loop uses the same strategy.
 - `load_precomputed` no longer requires inputs to be registered in the same order as when the table was saved; the table axes are reordered by node name. Tables saved by older versions still load, with a `UserWarning`.
 - Disk cache keys include a cache-format version. Existing `cache_dir` entries (which may contain unmasked nodata) are ignored and refetched once; old files can be deleted manually.
 

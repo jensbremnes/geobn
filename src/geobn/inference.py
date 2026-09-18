@@ -6,15 +6,27 @@ Rather than running pgmpy once per pixel (potentially millions of times),
 we find all *unique combinations* of discretised input states and look up
 the posterior once per combination.  Two strategies cover the spectrum:
 
-1. **Per-combo loop** — one VariableElimination query per unique evidence
-   combination (all query nodes share a single elimination pass).  Cheapest
-   when only a handful of combinations occur.
+1. **Per-combo loop** — VariableElimination queries per unique evidence
+   combination.  Cheapest when only a handful of combinations occur.  Within
+   a combination, all query nodes are requested in one call when their joint
+   table is small (``_MAX_JOINT_QUERY_CELLS``); otherwise each query node is
+   queried separately.  pgmpy builds the full joint over all query nodes even
+   with ``joint=False``, so one call for many query nodes can be orders of
+   magnitude slower than separate calls.
 2. **Single joint query** — for larger combination counts, the *full*
    conditional table P(query | e_1 ... e_k) is obtained from one VE query
    of the joint P(query, e_1, ..., e_k) normalised along the query axis.
    One pgmpy call replaces up to prod(n_states) calls; results are then
    mapped to pixels by numpy fancy indexing.  Used whenever the table fits
    within ``_MAX_TABLE_CELLS``.
+
+Impossible evidence
+-------------------
+When an evidence combination has probability zero, the posterior is
+undefined and every query node gets NaN on every path.  pgmpy on its own
+would return numbers for query nodes that are d-separated from the
+contradiction (it prunes that evidence away), so the per-combo loop checks
+P(evidence) explicitly.
 
 Data flow
 ---------
@@ -45,6 +57,11 @@ _COMBO_LOOP_THRESHOLD = 200
 # nodes, ~80 MB at the default).  Beyond this the joint-query strategy is
 # skipped and the per-combo loop is used instead.
 _MAX_TABLE_CELLS = 20_000_000
+
+# Upper bound on the joint table over the query nodes (product of their state
+# counts) for requesting them in one pgmpy call.  Above it, each query node is
+# queried separately.  Measured crossover is ~1e5 cells; this leaves margin.
+_MAX_JOINT_QUERY_CELLS = 20_000
 
 
 def build_conditional_table(
@@ -165,20 +182,94 @@ def _unique_evidence_combos(
     return unique_combos, pixel_to_combo
 
 
+def _root_priors(model: DiscreteBayesianNetwork) -> dict[str, dict[str, float]]:
+    """Prior P(state) for every root node, keyed by node and state name."""
+    priors: dict[str, dict[str, float]] = {}
+    for node in model.nodes():
+        if not list(model.predecessors(node)):
+            cpd = model.get_cpds(node)
+            priors[node] = dict(zip(cpd.state_names[node], cpd.get_values()[:, 0]))
+    return priors
+
+
+def _evidence_is_impossible(
+    ve: VariableElimination,
+    evidence: dict[str, str],
+    root_priors: dict[str, dict[str, float]],
+) -> bool:
+    """True if P(evidence) == 0.
+
+    Root nodes are marginally independent, so their joint probability is the
+    product of their priors.  Remaining (non-root) evidence nodes are checked
+    with the chain rule P(e_i | e_1 ... e_{i-1}), one single-node query each.
+    """
+    observed: dict[str, str] = {}
+    for node, state in evidence.items():
+        if node in root_priors:
+            if not root_priors[node][state] > 0:
+                return True
+            observed[node] = state
+    for node, state in evidence.items():
+        if node in root_priors:
+            continue
+        factor = ve.query([node], evidence=observed, show_progress=False)
+        if not factor.get_value(**{node: state}) > 0:
+            return True
+        observed[node] = state
+    return False
+
+
+def _query_marginals(
+    ve: VariableElimination,
+    model: DiscreteBayesianNetwork,
+    query_nodes: list[str],
+    evidence: dict[str, str],
+    root_priors: dict[str, dict[str, float]],
+) -> dict[str, np.ndarray]:
+    """Posterior marginal of each query node given one evidence combination.
+
+    Returns float32 arrays in BN state order.  All-NaN when P(evidence) == 0.
+    """
+    unique_nodes = list(dict.fromkeys(query_nodes))
+
+    if _evidence_is_impossible(ve, evidence, root_priors):
+        return {
+            q: np.full(model.get_cardinality(q), np.nan, dtype=np.float32)
+            for q in unique_nodes
+        }
+
+    joint_cells = 1
+    for q in unique_nodes:
+        joint_cells *= model.get_cardinality(q)
+
+    if joint_cells <= _MAX_JOINT_QUERY_CELLS:
+        marginals = ve.query(
+            unique_nodes, evidence=evidence, joint=False, show_progress=False
+        )
+        if not isinstance(marginals, dict):
+            # Single query node: pgmpy may return the factor directly.
+            marginals = {unique_nodes[0]: marginals}
+    else:
+        marginals = {
+            q: ve.query([q], evidence=evidence, show_progress=False)
+            for q in unique_nodes
+        }
+    return {q: marginals[q].values.astype(np.float32) for q in unique_nodes}
+
+
 def _query_per_combo(
     ve: VariableElimination,
+    model: DiscreteBayesianNetwork,
     unique_combos: np.ndarray,
     node_list: list[str],
     evidence_state_names: dict[str, list[str]],
     query_nodes: list[str],
 ) -> dict[str, np.ndarray]:
-    """Run one VE query per unique evidence combination.
-
-    All query nodes are requested in a single ``joint=False`` call per combo,
-    so the elimination pass is shared rather than repeated per query node.
+    """Run VE queries for each unique evidence combination.
 
     Returns a mapping from query node to a (n_unique, n_states) float32 array.
     """
+    root_priors = _root_priors(model)
     combo_probs: dict[str, list[np.ndarray]] = {q: [] for q in query_nodes}
 
     for combo in unique_combos:
@@ -188,18 +279,13 @@ def _query_per_combo(
             node_list[i]: evidence_state_names[node_list[i]][combo[i]]
             for i in range(len(node_list))
         }
-        marginals = ve.query(
-            query_nodes, evidence=evidence_collection, joint=False, show_progress=False
+        marginals = _query_marginals(
+            ve, model, query_nodes, evidence_collection, root_priors
         )
-        if not isinstance(marginals, dict):
-            # Single query node: pgmpy may return the factor directly.
-            marginals = {query_nodes[0]: marginals}
-        for query_node in query_nodes:
-            combo_probs[query_node].append(
-                marginals[query_node].values.astype(np.float32)
-            )
+        for query_node in combo_probs:
+            combo_probs[query_node].append(marginals[query_node])
 
-    return {q: np.stack(combo_probs[q], axis=0) for q in query_nodes}
+    return {q: np.stack(combo_probs[q], axis=0) for q in combo_probs}
 
 
 def run_inference(
@@ -295,7 +381,7 @@ def run_inference(
 
     if probs_per_combo is None:
         probs_per_combo = _query_per_combo(
-            ve, unique_combos, node_list, evidence_state_names, query_nodes
+            ve, model, unique_combos, node_list, evidence_state_names, query_nodes
         )
 
     # Map inference results back to the spatial grid.
