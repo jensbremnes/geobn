@@ -19,9 +19,10 @@ ConstantSource
 
 Derived inputs
 --------------
-``slope_angle``   — slope in degrees computed from the DEM via numpy.gradient.
-``sun_exposure``  — aspect quadrant (0=north, 1=east, 2=west, 3=south) derived
-                    from the same DEM. Risk order: north > east > west > south.
+``slope_angle``   — slope in degrees from finite differences of the DEM
+                    (one-sided next to sea/nodata, so no fake coastal cliffs).
+``sun_exposure``  — quadrant the slope faces (0=north, 1=east, 2=west, 3=south)
+                    derived from the same DEM. Risk order: north > east > west > south.
 ``forest_cover``  — treeline heuristic: dense below 400 m, moderate 400–800 m,
                     sparse above 800 m (alpine zone). Derived from the DEM.
 
@@ -76,6 +77,29 @@ CACHE_DIR = Path(__file__).parent / "cache"  # terrain cached here after first r
 # Terrain derivation from DEM
 # ---------------------------------------------------------------------------
 
+def _nan_gradient(z: np.ndarray, spacing: float, axis: int) -> np.ndarray:
+    """Finite-difference derivative of *z* along *axis* that respects NaN.
+
+    Central difference where both neighbours are valid, forward or backward
+    difference where only one is, NaN where neither is.  Without NaN this
+    equals ``np.gradient(z, spacing, axis=axis)``.
+    """
+    pad = [(0, 0)] * z.ndim
+    pad[axis] = (1, 1)
+    zp = np.pad(z.astype(np.float64), pad, constant_values=np.nan)
+    n = z.shape[axis]
+    prev = np.take(zp, range(0, n), axis=axis)
+    nxt = np.take(zp, range(2, n + 2), axis=axis)
+
+    central = (nxt - prev) / (2.0 * spacing)
+    forward = (nxt - z) / spacing
+    backward = (z - prev) / spacing
+    return np.where(
+        np.isfinite(central), central,
+        np.where(np.isfinite(forward), forward, backward),
+    )
+
+
 def compute_slope_aspect(dem: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Return (slope_deg, sun_exposure) derived from a geographic-CRS DEM.
 
@@ -88,14 +112,16 @@ def compute_slope_aspect(dem: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     Returns
     -------
     slope_deg : float32 (H, W)
-        Slope in degrees (0–90). NaN where DEM is NaN.
+        Slope in degrees (0–90). NaN where the DEM is NaN or a pixel has no
+        valid neighbour along a row or column.
     sun_exposure : float32 (H, W)
-        Aspect class as a numeric code mapped to the BN ``sun_exposure`` states:
+        Class of the direction the slope faces (downslope), as a numeric
+        code mapped to the BN ``sun_exposure`` states:
           0 = north (315°–45°)  — highest avalanche risk
           1 = east  (45°–135°)  — second-highest risk
           2 = west  (225°–315°) — third
           3 = south (135°–225°) — lowest risk (most sun exposure)
-        NaN where DEM is NaN.
+        NaN where ``slope_deg`` is NaN.
     """
     lat_mid = (SOUTH + NORTH) / 2.0
     m_per_deg_lat = 111_320.0
@@ -103,22 +129,22 @@ def compute_slope_aspect(dem: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     pixel_lat_m = RESOLUTION * m_per_deg_lat   # row spacing in metres (~556 m)
     pixel_lon_m = RESOLUTION * m_per_deg_lon   # col spacing in metres (~201 m)
 
-    # Fill NaN with 0 so gradient doesn't propagate NaN into neighbours.
-    dem_filled = np.where(np.isnan(dem), 0.0, dem)
-
-    # np.gradient(arr, dy, dx) returns (dz/dy, dz/dx).
     # Rows increase southward in a north-up raster, so dz_drow is the
-    # southward partial derivative.
-    dz_drow, dz_dcol = np.gradient(dem_filled, pixel_lat_m, pixel_lon_m)
+    # southward partial derivative.  One-sided differences next to nodata
+    # avoid fake cliffs along the coast.
+    dz_drow = _nan_gradient(dem, pixel_lat_m, axis=0)
+    dz_dcol = _nan_gradient(dem, pixel_lon_m, axis=1)
 
     # Slope magnitude in degrees.
     slope_deg = np.degrees(
         np.arctan(np.sqrt(dz_dcol**2 + dz_drow**2))
     ).astype(np.float32)
 
-    # Aspect as compass bearing of steepest ascent (0°=N, 90°=E, 180°=S, 270°=W).
+    # Aspect = compass bearing the slope faces, i.e. of steepest descent
+    # (0°=N, 90°=E, 180°=S, 270°=W).  arctan2(east, north) of the gradient
+    # gives the ascent bearing; the slope faces the opposite way.
     # East component = dz_dcol; north component = -dz_drow (rows↑ = south↓).
-    aspect_compass = np.degrees(np.arctan2(dz_dcol, -dz_drow)) % 360.0
+    aspect_compass = (np.degrees(np.arctan2(dz_dcol, -dz_drow)) + 180.0) % 360.0
 
     # Classify into 4 cardinal quadrants ordered by avalanche risk (N highest, S lowest).
     sun_exposure = np.where(
@@ -132,8 +158,8 @@ def compute_slope_aspect(dem: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         ),
     ).astype(np.float32)
 
-    # Restore NaN mask from the original DEM.
-    nodata = np.isnan(dem)
+    # NaN where the DEM is NaN or a pixel has no valid neighbour along an axis.
+    nodata = np.isnan(dem) | np.isnan(dz_drow) | np.isnan(dz_dcol)
     slope_deg[nodata]    = np.nan
     sun_exposure[nodata] = np.nan
 
