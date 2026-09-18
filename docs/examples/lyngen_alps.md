@@ -69,9 +69,9 @@ The terrain is cached after the first run. On subsequent runs it loads from
 ### 3. Derive slope and aspect
 
 ```python
-slope_deg, north_facing = compute_slope_aspect(dem)
+slope_deg, sun_exposure = compute_slope_aspect(dem)
 # slope_deg:    float32 (H, W), range 0–90°
-# north_facing: float32 (H, W), 1.0 = N-facing, 0.0 = S-facing
+# sun_exposure: float32 (H, W), direction the slope faces: 0=N, 1=E, 2=W, 3=S
 ```
 
 The pixel-metre conversion accounts for the geographic CRS:
@@ -79,8 +79,14 @@ The pixel-metre conversion accounts for the geographic CRS:
 ```python
 m_per_deg_lat = 111_320.0
 m_per_deg_lon = 111_320.0 * np.cos(np.radians(lat_mid))
-dz_drow, dz_dcol = np.gradient(dem_filled, pixel_lat_m, pixel_lon_m)
+dz_drow = _nan_gradient(dem, pixel_lat_m, axis=0)
+dz_dcol = _nan_gradient(dem, pixel_lon_m, axis=1)
 ```
+
+`_nan_gradient` uses central differences like `np.gradient`, but falls back to a
+one-sided difference next to sea or nodata instead of treating those pixels as
+0 m, which would create fake cliffs along the coast.  Aspect is the direction of
+steepest *descent*, i.e. the way the slope faces.
 
 ### 4. Load the BN and wire inputs
 
