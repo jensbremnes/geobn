@@ -11,10 +11,14 @@ from dataclasses import dataclass
 import numpy as np
 from affine import Affine
 from pyproj import Geod, Transformer
+from pyproj.exceptions import ProjError
 
 from ._types import RasterData
 
 _log = logging.getLogger(__name__)
+
+# Points sampled per grid edge in extent_wgs84 (same default as GDAL/rasterio)
+_EXTENT_DENSIFY_PTS = 21
 
 
 @dataclass
@@ -73,25 +77,43 @@ class GridSpec:
     # ------------------------------------------------------------------
 
     def extent_wgs84(self) -> tuple[float, float, float, float]:
-        """Return the bounding box in WGS84 (lon_min, lat_min, lon_max, lat_max)."""
+        """Return the bounding box in WGS84 (lon_min, lat_min, lon_max, lat_max).
+
+        Points along all four grid edges are transformed, not just the
+        corners, because straight edges in a projected CRS are curved in
+        lon/lat.  If the grid contains a pole (e.g. polar stereographic), the
+        box extends to that pole and spans all longitudes.  A grid crossing
+        the antimeridian is not split; it gets a box spanning nearly
+        -180..180 degrees longitude.
+        """
         H, W = self.shape
-        grid_transform = self.transform
-        # Four corners in the source CRS
-        corner_x = [
-            grid_transform.c,
-            grid_transform.c + W * grid_transform.a,
-            grid_transform.c + H * grid_transform.b,
-            grid_transform.c + W * grid_transform.a + H * grid_transform.b,
-        ]
-        corner_y = [
-            grid_transform.f,
-            grid_transform.f + W * grid_transform.d,
-            grid_transform.f + H * grid_transform.e,
-            grid_transform.f + W * grid_transform.d + H * grid_transform.e,
-        ]
+        t = np.linspace(0.0, 1.0, _EXTENT_DENSIFY_PTS)
+        # Pixel-space points along the top, right, bottom and left edges
+        cols = np.concatenate([t * W, np.full_like(t, W), t * W, np.zeros_like(t)])
+        rows = np.concatenate([np.zeros_like(t), t * H, np.full_like(t, H), t * H])
+        xs, ys = self.transform * (cols, rows)
         transformer = Transformer.from_crs(self.crs, "EPSG:4326", always_xy=True)
-        lons, lats = transformer.transform(corner_x, corner_y)
-        return float(min(lons)), float(min(lats)), float(max(lons)), float(max(lats))
+        lons, lats = transformer.transform(xs, ys)
+        lon_min, lat_min = float(np.min(lons)), float(np.min(lats))
+        lon_max, lat_max = float(np.max(lons)), float(np.max(lats))
+
+        # A pole inside the grid is never reached by the edges
+        inverse = Transformer.from_crs("EPSG:4326", self.crs, always_xy=True)
+        for pole_lat in (90.0, -90.0):
+            try:
+                pole_x, pole_y = inverse.transform(0.0, pole_lat, errcheck=True)
+            except ProjError:
+                continue
+            if not (np.isfinite(pole_x) and np.isfinite(pole_y)):
+                continue
+            col, row = ~self.transform * (pole_x, pole_y)
+            if 0 <= col <= W and 0 <= row <= H:
+                lon_min, lon_max = -180.0, 180.0
+                if pole_lat > 0:
+                    lat_max = 90.0
+                else:
+                    lat_min = -90.0
+        return lon_min, lat_min, lon_max, lat_max
 
 
 def _pixel_size_m(grid: GridSpec) -> float:

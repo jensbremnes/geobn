@@ -4,6 +4,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from affine import Affine
+from pyproj import Transformer
 
 from geobn._types import RasterData
 from geobn.grid import GridSpec, _bilinear_resample, _pixel_size_m, _reproject, align_to_grid
@@ -47,6 +48,48 @@ class TestGridSpec:
         lon_min, lat_min, lon_max, lat_max = grid.extent_wgs84()
         assert lon_min == pytest.approx(0.0, abs=0.01)
         assert lat_max == pytest.approx(50.0, abs=0.01)
+
+    def test_extent_wgs84_covers_curved_edges(self):
+        """Edge midpoints bulge past the corners in a large projected grid."""
+        grid = GridSpec(
+            crs="EPSG:3035",
+            transform=Affine(1000, 0, 4_000_000, 0, -1000, 4_000_000),
+            shape=(1000, 1000),
+        )
+        lon_min, lat_min, lon_max, lat_max = grid.extent_wgs84()
+        to_wgs84 = Transformer.from_crs(grid.crs, "EPSG:4326", always_xy=True)
+        H, W = grid.shape
+        corners = [(0, 0), (W, 0), (0, H), (W, H)]
+        midpoints = [(W / 2, 0), (W, H / 2), (W / 2, H), (0, H / 2)]
+        corner_lons, corner_lats = to_wgs84.transform(*zip(*(grid.transform * p for p in corners)))
+        mid_lons, mid_lats = to_wgs84.transform(*zip(*(grid.transform * p for p in midpoints)))
+        # Some edge midpoint lies outside the corner-only box...
+        assert max(mid_lats) > max(corner_lats) or min(mid_lats) < min(corner_lats)
+        # ...but every midpoint lies inside the densified box
+        for lon, lat in zip(mid_lons, mid_lats):
+            assert lon_min <= lon <= lon_max
+            assert lat_min <= lat <= lat_max
+
+    @pytest.mark.parametrize("crs, pole", [("EPSG:3413", 90.0), ("EPSG:3031", -90.0)])
+    def test_extent_wgs84_polar_grid_includes_pole(self, crs, pole):
+        grid = GridSpec.from_params(crs, 10_000, (-500_000, -500_000, 500_000, 500_000))
+        lon_min, lat_min, lon_max, lat_max = grid.extent_wgs84()
+        assert (lon_min, lon_max) == (-180.0, 180.0)
+        if pole > 0:
+            assert lat_max == 90.0
+            assert lat_min == pytest.approx(83.5, abs=0.2)
+        else:
+            assert lat_min == -90.0
+            assert lat_max == pytest.approx(-83.5, abs=0.2)
+
+    def test_extent_wgs84_utm_without_pole(self):
+        """The pole projects outside a UTM grid, so the box stays local."""
+        grid = GridSpec(
+            crs="EPSG:32633", transform=Affine(10, 0, 700_000, 0, -10, 7_750_000), shape=(2000, 2000)
+        )
+        lon_min, lat_min, lon_max, lat_max = grid.extent_wgs84()
+        assert 18 < lon_min < lon_max < 21
+        assert 69 < lat_min < lat_max < 70
 
 
 class TestPixelSizeM:

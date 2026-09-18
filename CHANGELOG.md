@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `load_precomputed` restores the saved discretizations for inputs that have none set, so a runtime machine only needs to register the inputs.
 
 ### Fixed
+- `GridSpec.extent_wgs84()` now transforms 21 points along each grid edge instead of only the 4 corners, so `WCSSource` and `PointGridSource` no longer request a box that is too small for large projected grids (edges curve in lon/lat; up to ~12 km was missed on a 1000 km grid). A grid that contains a pole now gives a box reaching that pole and spanning all longitudes.
 - Lyngen example: slope no longer treats sea/nodata as 0 m elevation, which created fake cliffs along the coast (a flat coastal plateau got ~38°). Differences next to nodata are now one-sided. Aspect classes now use the direction the slope faces; north/south and east/west were swapped.
 - Discretization labels given in a different order from the BN's states (e.g. `["high", "medium", "low"]` for a node defined as `low, medium, high`) gave wrong posteriors from the precomputed table (`infer` after `precompute`, `query_point`, `query_batch`). The pgmpy path was correct. Indices are now mapped to the BN's state order in every path.
 - `RasterSource`, `URLSource` and `WCSSource` now convert the GeoTIFF's declared nodata value (and internal masks) to NaN. Previously nodata sentinels such as −9999 were discretized as real values, producing confident but wrong posteriors.
