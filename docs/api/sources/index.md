@@ -28,7 +28,9 @@ ignore the `grid` argument. They carry their own spatial metadata.
 
 **Grid-aware** sources need the reference grid to determine what geographic area to
 query. They call `grid.extent_wgs84()` to obtain `(lon_min, lat_min, lon_max, lat_max)`
-before making API or WCS requests.
+before making API or WCS requests. The box is computed from points along all four grid
+edges, so it covers edges that curve in lon/lat, and it reaches the pole for polar grids.
+A grid crossing the antimeridian gets a box spanning nearly all longitudes.
 
 Grid-aware sources are: `WCSSource`, `PointGridSource`.
 
