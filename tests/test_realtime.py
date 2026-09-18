@@ -393,44 +393,6 @@ class TestSaveLoadPrecomputed:
         with pytest.raises(RuntimeError, match="No precomputed table"):
             bn.save_precomputed(tmp_path / "table.npz")
 
-    def test_load_raises_on_node_order_mismatch(self, fire_risk_model, tmp_path):
-        """load_precomputed() must raise ValueError if node order differs."""
-        bn = _make_bn(fire_risk_model)
-        bn.precompute(query=["fire_risk"])
-        out = tmp_path / "table.npz"
-        bn.save_precomputed(out)
-
-        # Build a BN with inputs registered in reverse order
-        bn2 = GeoBayesianNetwork(fire_risk_model)
-        bn2.set_grid(_CRS, 0.1, (0.0, 49.0, 0.3, 49.3))
-        bn2.set_input("rainfall", ArraySource(_RAIN, crs=_CRS, transform=_TRANSFORM))
-        bn2.set_input("slope", ArraySource(_SLOPE, crs=_CRS, transform=_TRANSFORM))
-        bn2.set_discretization("slope", _SLOPE_DISC, _SLOPE_LABELS)
-        bn2.set_discretization("rainfall", _RAIN_DISC, _RAIN_LABELS)
-
-        with pytest.raises(ValueError, match="Node order mismatch"):
-            bn2.load_precomputed(out)
-
-    def test_load_raises_on_shape_mismatch(self, fire_risk_model, tmp_path):
-        """load_precomputed() must raise ValueError if discretization n_states differ."""
-        from geobn.discretize import DiscretizationSpec
-
-        bn = _make_bn(fire_risk_model)
-        bn.precompute(query=["fire_risk"])
-        out = tmp_path / "table.npz"
-        bn.save_precomputed(out)
-
-        # Build a normal BN, then override _discretizations to simulate a mismatch
-        # (fewer bins for slope than the saved table expects).
-        bn2 = _make_bn(fire_risk_model)
-        # Directly replace the discretization so n_states differs from the saved table
-        bn2._discretizations["slope"] = DiscretizationSpec(
-            breakpoints=[0, 45, 90], labels=["gentle", "steep"]
-        )
-
-        with pytest.raises(ValueError, match="Shape mismatch"):
-            bn2.load_precomputed(out)
-
     def test_load_raises_file_not_found(self, fire_risk_model, tmp_path):
         """load_precomputed() must raise FileNotFoundError for a missing file."""
         bn = _make_bn(fire_risk_model)
@@ -452,3 +414,189 @@ class TestSaveLoadPrecomputed:
         # Result should be valid (non-NaN) for all pixels
         probs = result.probabilities["fire_risk"]
         assert not np.all(np.isnan(probs)), "Expected valid (non-NaN) probabilities"
+
+
+# ---------------------------------------------------------------------------
+# TestPrecomputedValidation
+# ---------------------------------------------------------------------------
+
+
+def _saved_table(model, tmp_path) -> tuple[GeoBayesianNetwork, object]:
+    bn = _make_bn(model)
+    bn.precompute(query=["fire_risk"])
+    out = tmp_path / "table.npz"
+    bn.save_precomputed(out)
+    return bn, out
+
+
+def _bare_bn(model, order=("slope", "rainfall")) -> GeoBayesianNetwork:
+    """Inputs and grid, but no discretizations."""
+    arrays = {"slope": _SLOPE, "rainfall": _RAIN}
+    bn = GeoBayesianNetwork(model)
+    bn.set_grid(_CRS, 0.1, (0.0, 49.0, 0.3, 49.3))
+    for node in order:
+        bn.set_input(node, ArraySource(arrays[node], crs=_CRS, transform=_TRANSFORM))
+    return bn
+
+
+def _with_fire_cpd(model, values):
+    from pgmpy.factors.discrete import TabularCPD
+
+    other = model.copy()
+    old = other.get_cpds("fire_risk")
+    other.remove_cpds(old)
+    other.add_cpds(TabularCPD(
+        "fire_risk", 3, values,
+        evidence=["slope", "rainfall"], evidence_card=[3, 3],
+        state_names={v: list(old.state_names[v]) for v in old.variables},
+    ))
+    return other
+
+
+class TestPrecomputedValidation:
+    def test_reordered_inputs_load_and_match(self, fire_risk_model, tmp_path):
+        """Inputs registered in another order: axes are reordered, results unchanged."""
+        bn, out = _saved_table(fire_risk_model, tmp_path)
+        expected = bn.infer(query=["fire_risk"]).probabilities["fire_risk"]
+
+        bn2 = _bare_bn(fire_risk_model, order=("rainfall", "slope"))
+        bn2.load_precomputed(out)
+        assert bn2._evidence_nodes == ["rainfall", "slope"]
+        np.testing.assert_allclose(
+            bn2.infer(query=["fire_risk"]).probabilities["fire_risk"], expected, atol=1e-6
+        )
+        assert bn2.query_point({"slope": 35.0, "rainfall": 10.0}) == bn.query_point(
+            {"slope": 35.0, "rainfall": 10.0}
+        )
+
+    def test_different_input_set_raises(self, fire_risk_model, tmp_path):
+        _, out = _saved_table(fire_risk_model, tmp_path)
+        bn2 = _bare_bn(fire_risk_model, order=("slope",))
+        with pytest.raises(ValueError, match="Evidence node mismatch"):
+            bn2.load_precomputed(out)
+
+    def test_different_cpd_values_raise(self, fire_risk_model, tmp_path):
+        _, out = _saved_table(fire_risk_model, tmp_path)
+        other = _with_fire_cpd(fire_risk_model, [[1 / 3] * 9] * 3)
+        with pytest.raises(ValueError, match="different model"):
+            _make_bn(other).load_precomputed(out)
+
+    def test_different_state_order_raises(self, fire_risk_model, tmp_path):
+        from pgmpy.factors.discrete import TabularCPD
+
+        _, out = _saved_table(fire_risk_model, tmp_path)
+        other = fire_risk_model.copy()
+        other.remove_cpds(other.get_cpds("rainfall"))
+        other.add_cpds(TabularCPD(
+            "rainfall", 3, [[0.3], [0.4], [0.3]],
+            state_names={"rainfall": ["high", "medium", "low"]},
+        ))
+        with pytest.raises(ValueError, match="State names for 'rainfall' differ"):
+            _bare_bn(other).load_precomputed(out)
+
+    def test_discretizations_restored_when_unset(self, fire_risk_model, tmp_path):
+        bn, out = _saved_table(fire_risk_model, tmp_path)
+        bn2 = _bare_bn(fire_risk_model)
+        bn2.load_precomputed(out)
+        assert bn2._discretizations["slope"].breakpoints == [0.0, 10.0, 30.0, 90.0]
+        assert bn2._discretizations["rainfall"].labels == _RAIN_LABELS
+        np.testing.assert_allclose(
+            bn2.infer(query=["fire_risk"]).probabilities["fire_risk"],
+            bn.infer(query=["fire_risk"]).probabilities["fire_risk"],
+            atol=1e-6,
+        )
+
+    @pytest.mark.parametrize(
+        "breakpoints, out_of_range",
+        [([0, 15, 30, 90], "clip"), (_SLOPE_DISC, "nan")],
+    )
+    def test_different_discretization_raises(
+        self, fire_risk_model, tmp_path, breakpoints, out_of_range
+    ):
+        _, out = _saved_table(fire_risk_model, tmp_path)
+        bn2 = _bare_bn(fire_risk_model)
+        bn2.set_discretization("slope", breakpoints, _SLOPE_LABELS, out_of_range=out_of_range)
+        with pytest.raises(ValueError, match="Discretization for 'slope' differs"):
+            bn2.load_precomputed(out)
+
+    def test_unsaved_discretization_must_be_set(self, fire_risk_model, tmp_path):
+        """precompute() without discretizations saves null; load still needs one."""
+        bn = _bare_bn(fire_risk_model)
+        bn.precompute(query=["fire_risk"])
+        out = tmp_path / "table.npz"
+        bn.save_precomputed(out)
+        with pytest.raises(ValueError, match="No discretization set"):
+            _bare_bn(fire_risk_model).load_precomputed(out)
+        _make_bn(fire_risk_model).load_precomputed(out)
+
+    def test_legacy_file_loads_with_warning(self, fire_risk_model, tmp_path):
+        import json
+
+        bn, out = _saved_table(fire_risk_model, tmp_path)
+        legacy = tmp_path / "legacy.npz"
+        meta = {"evidence_nodes": ["slope", "rainfall"], "query_nodes": ["fire_risk"]}
+        np.savez_compressed(
+            legacy,
+            fire_risk=bn._inference_table["fire_risk"],
+            __metadata__=np.array([json.dumps(meta)]),
+        )
+        bn2 = _make_bn(fire_risk_model)
+        with pytest.warns(UserWarning, match="older geobn"):
+            bn2.load_precomputed(legacy)
+        np.testing.assert_allclose(
+            bn2._inference_table["fire_risk"], bn._inference_table["fire_risk"]
+        )
+
+    def test_model_hash_stable_across_bif_roundtrip(self, fire_risk_model, tmp_path):
+        from pgmpy.readwrite import BIFWriter
+
+        import geobn
+        from geobn.network import _model_hash
+
+        path = tmp_path / "model.bif"
+        BIFWriter(fire_risk_model).write_bif(str(path))
+        assert _model_hash(geobn.load(path)._model) == _model_hash(fire_risk_model)
+        other = _with_fire_cpd(fire_risk_model, [[1 / 3] * 9] * 3)
+        assert _model_hash(other) != _model_hash(fire_risk_model)
+
+
+class TestLabelOrder:
+    """Labels given in a different order from the BN states must map correctly."""
+
+    def _bn(self, fire_risk_model) -> GeoBayesianNetwork:
+        bn = GeoBayesianNetwork(fire_risk_model)
+        bn.set_grid(_CRS, 0.1, (0.0, 49.0, 0.3, 49.3))
+        bn.set_input("slope", ArraySource(_SLOPE, crs=_CRS, transform=_TRANSFORM))
+        bn.set_input("rainfall", ArraySource(_RAIN, crs=_CRS, transform=_TRANSFORM))
+        # Same bins as _make_bn, labels reversed: 5 → "steep", 35 → "flat"
+        bn.set_discretization("slope", _SLOPE_DISC, ["steep", "moderate", "flat"])
+        bn.set_discretization("rainfall", _RAIN_DISC, _RAIN_LABELS)
+        return bn
+
+    def test_table_path_matches_ve_path(self, fire_risk_model):
+        bn = self._bn(fire_risk_model)
+        ve = bn.infer(query=["fire_risk"]).probabilities["fire_risk"]
+        bn.precompute(query=["fire_risk"])
+        table = bn.infer(query=["fire_risk"]).probabilities["fire_risk"]
+        np.testing.assert_allclose(table, ve, atol=1e-6)
+
+        # And the labels really are applied: slope 5 / rain 10 is the (steep, low) CPT column
+        np.testing.assert_allclose(ve[0, 0], [0.20, 0.40, 0.40], atol=1e-6)
+
+    def test_frozen_table_path_matches_ve_path(self, fire_risk_model):
+        bn = self._bn(fire_risk_model)
+        ve = bn.infer(query=["fire_risk"]).probabilities["fire_risk"]
+        bn.freeze("slope")
+        bn.precompute(query=["fire_risk"])
+        bn.infer(query=["fire_risk"])
+        again = bn.infer(query=["fire_risk"]).probabilities["fire_risk"]
+        np.testing.assert_allclose(again, ve, atol=1e-6)
+
+    def test_query_point_numeric_and_state_name(self, fire_risk_model):
+        bn = self._bn(fire_risk_model)
+        ve = bn.infer(query=["fire_risk"]).probabilities["fire_risk"]
+        bn.precompute(query=["fire_risk"])
+        numeric = bn.query_point({"slope": 5.0, "rainfall": 10.0})["fire_risk"]
+        named = bn.query_point({"slope": "steep", "rainfall": "low"})["fire_risk"]
+        np.testing.assert_allclose(list(numeric.values()), ve[0, 0], atol=1e-6)
+        assert numeric == named

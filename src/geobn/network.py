@@ -1,9 +1,11 @@
 """GeoBayesianNetwork — the primary user-facing class."""
 from __future__ import annotations
 
+import hashlib
 import itertools
 import json
 import logging
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +19,40 @@ from .result import InferenceResult
 from .sources._base import DataSource
 
 _log = logging.getLogger(__name__)
+
+# Bump when the __metadata__ layout written by save_precomputed changes.
+_TABLE_FORMAT_VERSION = 2
+
+
+def _geobn_version() -> str:
+    from importlib.metadata import PackageNotFoundError, version  # noqa: PLC0415
+
+    try:
+        return version("geobn")
+    except PackageNotFoundError:
+        return "unknown"
+
+
+def _model_hash(model: DiscreteBayesianNetwork) -> str:
+    """SHA-256 of the BN's structure, state names and CPD values.
+
+    Values are rounded to 10 decimals so a BIF write/read round-trip hashes
+    the same.
+    """
+    cpds = []
+    for cpd in sorted(model.get_cpds(), key=lambda c: c.variable):
+        cpds.append({
+            "variables": list(cpd.variables),
+            "state_names": {v: list(cpd.state_names[v]) for v in cpd.variables},
+            "values": np.round(np.asarray(cpd.values, dtype=np.float64), 10).tolist(),
+        })
+    canonical = {
+        "nodes": sorted(model.nodes()),
+        "edges": sorted([list(e) for e in model.edges()]),
+        "cpds": cpds,
+    }
+    payload = json.dumps(canonical, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 class GeoBayesianNetwork:
@@ -348,17 +384,41 @@ class GeoBayesianNetwork:
             raise RuntimeError(
                 "No precomputed table. Call precompute() first."
             )
-        # __metadata__ encodes which nodes form the table axes and which are
-        # query outputs.  Example for a BN with slope + rainfall → fire_risk:
+        # __metadata__ records what the table was built from, so load_precomputed
+        # can refuse a table that doesn't fit the current BN.  Example for a BN
+        # with slope + rainfall → fire_risk:
         #   {
+        #       "format_version": 2,
+        #       "geobn_version":  "0.1.1",
         #       "evidence_nodes": ["slope", "rainfall"],  # input axes of the table
-        #       "query_nodes":    ["fire_risk"]           # stored posteriors
+        #       "query_nodes":    ["fire_risk"],          # stored posteriors
+        #       "model_hash":     "<sha256 of structure, states and CPDs>",
+        #       "state_names":    {"slope": ["flat", ...], ..., "fire_risk": [...]},
+        #       "discretizations": {"slope": {"breakpoints": [...], "labels": [...],
+        #                                     "out_of_range": "clip"},
+        #                           "rainfall": null}      # null: not set at save
         #   }
         # The "fire_risk" array then has shape (n_slope_states, n_rainfall_states,
-        # n_fire_risk_states), e.g. (3, 3, 3).
+        # n_fire_risk_states), e.g. (3, 3, 3), with axes in BN state order.
+        discretizations: dict[str, dict[str, Any] | None] = {}
+        for n in self._evidence_nodes:
+            spec = self._discretizations.get(n)
+            discretizations[n] = None if spec is None else {
+                "breakpoints": [float(b) for b in spec.breakpoints],
+                "labels": list(spec.labels),
+                "out_of_range": spec.out_of_range,
+            }
         metadata = {
+            "format_version": _TABLE_FORMAT_VERSION,
+            "geobn_version": _geobn_version(),
             "evidence_nodes": self._evidence_nodes,
             "query_nodes": self._query_nodes,
+            "model_hash": _model_hash(self._model),
+            "state_names": {
+                n: self._bn_state_names(n)
+                for n in [*self._evidence_nodes, *self._query_nodes]
+            },
+            "discretizations": discretizations,
         }
         arrays = dict(self._inference_table)
         arrays["__metadata__"] = np.array([json.dumps(metadata)])
@@ -371,6 +431,21 @@ class GeoBayesianNetwork:
         After loading, :meth:`infer` uses the table path (O(H×W) numpy
         indexing) without calling pgmpy.
 
+        The file records the model it was built from, and loading checks it
+        against the current BN:
+
+        - The table's evidence nodes must be the current inputs.  If they were
+          registered in a different order, the table axes are reordered.
+        - The BN state names and a hash of the model (structure, states and
+          CPD values) must match.
+        - Discretizations saved with the table are restored for inputs that
+          have none set.  An input whose discretization is already set must
+          match the saved one.
+
+        Files written by older geobn versions carry none of this information.
+        They still load, with a warning, and only the evidence nodes and array
+        shapes are checked.
+
         Parameters
         ----------
         path:
@@ -381,8 +456,9 @@ class GeoBayesianNetwork:
         FileNotFoundError
             If neither *path* nor *path* + ``.npz`` exists.
         ValueError
-            If the table's node order, query nodes, or array shapes do not
-            match the current BN configuration.
+            If the table's evidence nodes, state names, model hash,
+            discretizations or array shapes do not match the current BN
+            configuration.
         """
         path = Path(path)
         if not path.exists():
@@ -404,19 +480,43 @@ class GeoBayesianNetwork:
         metadata = json.loads(str(data["__metadata__"][0]))
         node_order: list[str] = metadata["evidence_nodes"]
         query_nodes: list[str] = metadata["query_nodes"]
+        legacy = "format_version" not in metadata
+        if legacy:
+            warnings.warn(
+                f"'{path}' was saved by an older geobn and does not record the "
+                "model it was built from, so it cannot be fully validated.  "
+                "Re-run precompute() and save_precomputed() to upgrade it.",
+                UserWarning,
+                stacklevel=2,
+            )
 
-        # Validate node order matches current inputs
+        # The evidence nodes must be the current inputs; their order may differ
         current_order = list(self._inputs.keys())
-        if node_order != current_order:
+        if sorted(node_order) != sorted(current_order):
             raise ValueError(
-                f"Node order mismatch: table has {node_order}, "
+                f"Evidence node mismatch: table has {node_order}, "
                 f"current inputs are {current_order}.  "
-                "Re-register inputs in the same order or re-run precompute()."
+                "Register the same inputs or re-run precompute()."
             )
 
         # Validate every query node exists in the BN
         for n in query_nodes:
             self._validate_node_exists(n)
+
+        if not legacy:
+            for n, saved in metadata["state_names"].items():
+                self._validate_node_exists(n)
+                if saved != self._bn_state_names(n):
+                    raise ValueError(
+                        f"State names for '{n}' differ: table has {saved}, "
+                        f"the BN has {self._bn_state_names(n)}.  Re-run precompute()."
+                    )
+            if metadata["model_hash"] != _model_hash(self._model):
+                raise ValueError(
+                    f"The table in '{path}' was built from a different model "
+                    "(structure or CPD values differ).  Re-run precompute()."
+                )
+            self._restore_discretizations(metadata["discretizations"])
 
         # Validate array shapes match current discretizations
         missing = [n for n in node_order if n not in self._discretizations]
@@ -443,15 +543,46 @@ class GeoBayesianNetwork:
                     "Ensure discretization specs match those used when the table was saved."
                 )
 
+        # Reorder the evidence axes to the current input order; query axis stays last
+        axes = [node_order.index(n) for n in current_order] + [len(node_order)]
         self._inference_table = {
-            qnode: np.array(data[qnode], dtype=np.float32) for qnode in query_nodes
+            qnode: np.ascontiguousarray(np.transpose(data[qnode], axes), dtype=np.float32)
+            for qnode in query_nodes
         }
-        self._evidence_nodes = node_order
+        self._evidence_nodes = current_order
         self._query_nodes = query_nodes
         _log.info(
             "Loaded precomputed table from '%s': query=%s, evidence=%s",
-            path, query_nodes, node_order,
+            path, query_nodes, current_order,
         )
+
+    def _restore_discretizations(self, saved: dict[str, dict[str, Any] | None]) -> None:
+        """Adopt saved discretizations for unset inputs; raise if a set one differs."""
+        for node, entry in saved.items():
+            if entry is None:
+                continue
+            spec = DiscretizationSpec(
+                breakpoints=list(entry["breakpoints"]),
+                labels=list(entry["labels"]),
+                out_of_range=entry["out_of_range"],
+            )
+            current = self._discretizations.get(node)
+            if current is None:
+                self._validate_labels_match_bn(node, spec.labels)
+                self._discretizations[node] = spec
+                _log.info("Discretization for '%s' restored from table", node)
+            elif (
+                [float(b) for b in current.breakpoints] != spec.breakpoints
+                or current.labels != spec.labels
+                or current.out_of_range != spec.out_of_range
+            ):
+                raise ValueError(
+                    f"Discretization for '{node}' differs from the one saved with "
+                    f"the table (saved: breakpoints={spec.breakpoints}, "
+                    f"labels={spec.labels}, out_of_range={spec.out_of_range!r}).  "
+                    "Remove the set_discretization() call to use the saved one, "
+                    "or re-run precompute() and save_precomputed()."
+                )
 
     # ------------------------------------------------------------------
     # Point queries
@@ -618,8 +749,24 @@ class GeoBayesianNetwork:
                 f"Call set_discretization('{node}', breakpoints, labels) or pass "
                 "state names instead."
             )
-        flat = discretize_array(values.reshape(1, -1), spec)[0]
+        flat = self._to_bn_state_order(node, discretize_array(values.reshape(1, -1), spec))[0]
         return flat.reshape(values.shape).astype(int)
+
+    def _bn_state_names(self, node: str) -> list[str]:
+        return list(self._model.get_cpds(node).state_names[node])
+
+    def _to_bn_state_order(self, node: str, idx: np.ndarray) -> np.ndarray:
+        """Map indices into the discretization's labels to indices into the BN's states.
+
+        Labels may be given in any order, but the precomputed table axes (and the
+        state names passed to pgmpy) follow the BN's state order.  -1 stays -1.
+        """
+        labels = self._discretizations[node].labels
+        bn_states = self._bn_state_names(node)
+        if labels == bn_states:
+            return idx
+        perm = np.array([bn_states.index(label) for label in labels], dtype=idx.dtype)
+        return np.where(idx >= 0, perm[np.clip(idx, 0, None)], idx).astype(idx.dtype)
 
     def _validate_point_query(self, query: list[str] | None) -> list[str]:
         if query is None:
@@ -741,7 +888,7 @@ class GeoBayesianNetwork:
                     else source.fetch(grid=ref_grid)
                 )
                 arr = align_to_grid(data, ref_grid)
-                idx = discretize_array(arr, spec)
+                idx = self._to_bn_state_order(node, discretize_array(arr, spec))
 
                 if node in self._frozen_nodes:
                     # Cache discrete array; also cache the grid so the next call
@@ -752,7 +899,7 @@ class GeoBayesianNetwork:
 
             nodata_mask |= idx < 0
             evidence_state_grids[node] = idx
-            evidence_state_names[node] = spec.labels
+            evidence_state_names[node] = self._bn_state_names(node)
 
         # ── 4. Collect query node state names from the BN ──────────────
         query_state_names: dict[str, list[str]] = {}

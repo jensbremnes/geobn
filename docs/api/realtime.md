@@ -98,18 +98,28 @@ import geobn
 bn = geobn.load("model.bif")
 bn.set_input("slope", geobn.RasterSource("slope.tif"))
 bn.set_input("rainfall", geobn.ConstantSource(50.0))
-bn.set_discretization("slope", [0, 10, 30, 90], ["flat", "moderate", "steep"])
-bn.set_discretization("rainfall", [0, 25, 75, 200], ["low", "medium", "high"])
 
+# Discretizations saved with the table are restored, so no set_discretization() needed
 bn.load_precomputed("fire_risk_table.npz")  # no pgmpy inference — loads numpy archive
 result = bn.infer(query=["fire_risk"])       # O(H×W) table lookup, zero pgmpy calls
 ```
 
 !!! note
-    `load_precomputed()` validates that the file's node order and array shapes
-    match the current BN and discretization configuration.  A `ValueError` is
-    raised if there is a mismatch; a `FileNotFoundError` is raised if the file
-    does not exist.
+    The file records the model it was built from, and `load_precomputed()`
+    checks it against the current BN:
+
+    - The evidence nodes must be the current inputs.  They may be registered in
+      a different order; the table axes are reordered to match.
+    - The BN state names and a hash of the model (structure, states and CPD
+      values) must match, so a table from a different model cannot load.
+    - Discretizations (breakpoints, labels, `out_of_range`) saved with the
+      table are restored for inputs that have none set.  An input whose
+      discretization is already set must match the saved one.
+
+    Any mismatch raises `ValueError`; a missing file raises
+    `FileNotFoundError`.  Files saved by older geobn versions still load, with
+    a `UserWarning`, but only their evidence nodes and array shapes can be
+    checked.  Re-run `precompute()` and `save_precomputed()` to upgrade them.
 
 ---
 
