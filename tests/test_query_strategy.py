@@ -224,3 +224,43 @@ class TestImpossibleEvidence:
 
         possible = _query_marginals(ve, model, ["E"], {"A": "a0", "B": "b1", "C": "c1"}, priors)
         np.testing.assert_allclose(possible["E"], [0.5, 0.5], atol=1e-6)
+
+
+class TestImpossibleEvidenceWarning:
+    """NaN for impossible evidence is accompanied by a warning naming the cause."""
+
+    def _bn(self, model, a_values):
+        bn = GeoBayesianNetwork(model)
+        transform = Affine(1.0, 0, 0.0, 0, -1.0, 1.0)
+        grids = {"A": np.array([a_values], dtype=float), "B": np.zeros((1, 3)), "D": np.ones((1, 3))}
+        for node, grid in grids.items():
+            bn.set_input(node, ArraySource(grid, crs="EPSG:32632", transform=transform))
+            bn.set_discretization(node, [-0.5, 0.5, 1.5])
+        return bn
+
+    @pytest.mark.parametrize("use_table", [False, True])
+    def test_infer_warns_and_returns_nan(self, impossible_root_model, use_table):
+        bn = self._bn(impossible_root_model, [1, 0, 1])
+        if use_table:
+            bn.precompute(query=["C", "E"])
+        with pytest.warns(UserWarning, match=r"2 pixel\(s\).*A='a1'.*prior probability of 0"):
+            result = bn.infer(query=["C", "E"])
+        for q in ["C", "E"]:
+            probs = result.probabilities[q][0]
+            assert np.isnan(probs[[0, 2]]).all()
+            assert not np.isnan(probs[1]).any()
+
+    def test_no_warning_when_evidence_is_possible(self, impossible_root_model, recwarn):
+        bn = self._bn(impossible_root_model, [0, 0, 0])
+        bn.infer(query=["C", "E"])
+        bn.precompute(query=["C", "E"])     # the table holds NaN rows, but nothing observed them
+        bn.infer(query=["C", "E"])
+        bn.query_batch({"A": "a0", "B": "b0", "D": "d1"})
+        assert not [w for w in recwarn if "probability zero" in str(w.message)]
+
+    def test_query_batch_warns(self, impossible_root_model):
+        bn = self._bn(impossible_root_model, [0, 0, 0])
+        bn.precompute(query=["C", "E"])
+        with pytest.warns(UserWarning, match=r"1 point\(s\).*A='a1'"):
+            out = bn.query_batch({"A": ["a0", "a1"], "B": "b0", "D": "d1"})
+        assert np.isnan(out["E"][1]).all() and not np.isnan(out["E"][0]).any()

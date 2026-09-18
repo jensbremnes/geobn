@@ -715,6 +715,11 @@ class GeoBayesianNetwork:
             probs = self._inference_table[qnode][tuple(index_arrays)].astype(np.float32)
             probs[invalid] = np.nan
             out[qnode] = probs
+        if query:
+            impossible = ~invalid & np.isnan(out[query[0]]).all(axis=-1)
+            self._warn_impossible_evidence(
+                dict(zip(self._evidence_nodes, index_arrays)), impossible, "point(s)"
+            )
         return out
 
     @staticmethod
@@ -945,6 +950,9 @@ class GeoBayesianNetwork:
                 ve=self._cached_ve,
             )
 
+        impossible = ~nodata_mask & np.isnan(probabilities[query[0]]).all(axis=-1)
+        self._warn_impossible_evidence(evidence_state_grids, impossible, "pixel(s)")
+
         n_valid = int((~nodata_mask).sum())
         _log.info(
             "Inference complete: %d×%d pixels, %d valid",
@@ -956,6 +964,41 @@ class GeoBayesianNetwork:
             state_names=query_state_names,
             crs=ref_grid.crs,
             transform=ref_grid.transform,
+        )
+
+    def _warn_impossible_evidence(
+        self,
+        state_indices: dict[str, np.ndarray],
+        impossible: np.ndarray,
+        unit: str,
+    ) -> None:
+        """Warn when valid pixels/points got NaN because P(evidence) == 0.
+
+        *state_indices* maps each input node to its state indices (BN state
+        order) with the same shape as *impossible*.  The message names the
+        observed states whose prior is zero, the usual cause.
+        """
+        n_impossible = int(impossible.sum())
+        if n_impossible == 0:
+            return
+        causes = []
+        for node, indices in state_indices.items():
+            if list(self._model.predecessors(node)):
+                continue
+            prior = self._model.get_cpds(node).get_values()[:, 0]
+            states = self._bn_state_names(node)
+            observed = np.unique(np.asarray(indices)[impossible])
+            causes += [f"{node}='{states[i]}'" for i in observed if prior[i] == 0]
+        reason = (
+            f"the model gives {', '.join(causes)} a prior probability of 0"
+            if causes
+            else "the observed states contradict each other in the model"
+        )
+        warnings.warn(
+            f"{n_impossible} {unit} have evidence with probability zero ({reason}); "
+            "their posteriors are undefined and set to NaN.",
+            UserWarning,
+            stacklevel=3,
         )
 
     # ------------------------------------------------------------------

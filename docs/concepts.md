@@ -180,7 +180,9 @@ input observed in a state whose prior is 0), the posterior is undefined and *eve
 query node gets NaN, on every path. pgmpy on its own would still return numbers for
 query nodes it can prune away from the contradiction, so geobn checks P(evidence)
 explicitly: the product of the priors for root inputs, and the chain rule
-P(e₁)·P(e₂ | e₁)·… for any other evidence.
+P(e₁)·P(e₂ | e₁)·… for any other evidence. `infer()` and `query_batch()` also emit a
+`UserWarning` naming the observed states with prior 0 and the number of affected
+pixels or points, since a zero prior on an input is often a modelling slip.
 
 ## Output
 
