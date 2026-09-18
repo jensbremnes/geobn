@@ -60,7 +60,6 @@ import urllib.request
 from pathlib import Path
 
 import numpy as np
-import rasterio
 
 import geobn
 
@@ -391,30 +390,17 @@ def main() -> None:
             p = float(np.nanmean(p_high[mask]))
             print(f"  {label}: {p:.3f}  {bar(p)}")
 
-    # ── 8. Risk score (weighted average) ──────────────────────────────────
-    risk_score = (probs * np.array([10.0, 50.0, 90.0])).sum(axis=-1)  # (H, W)
-
-    profile = dict(
-        driver="GTiff",
-        height=risk_score.shape[0],
-        width=risk_score.shape[1],
-        count=1,
-        dtype="float32",
-        crs=result.crs,
-        transform=result.transform,
-    )
-    risk_score_path = OUT_DIR / "risk_score.tif"
-    with rasterio.open(risk_score_path, "w", **profile) as dst:
-        dst.write(risk_score.astype("float32"), 1)
+    # ── 8. Risk score (expected value) ────────────────────────────────────
+    risk_score = result.expected_value("usv_risk", {"low": 10.0, "medium": 50.0, "high": 90.0})
 
     print(f"\nRisk score  : min={np.nanmin(risk_score):.1f}  "
           f"max={np.nanmax(risk_score):.1f}  "
           f"mean={np.nanmean(risk_score):.1f}")
 
     # ── 9. Export GeoTIFF ─────────────────────────────────────────────────
-    result.to_geotiff(OUT_DIR)
+    result.to_geotiff(OUT_DIR, layers={"risk_score": risk_score})
     tif_path = OUT_DIR / "usv_risk.tif"
-    print(f"GeoTIFF written → {tif_path}")
+    print(f"GeoTIFF written → {tif_path}  (+ risk_score.tif)")
     print("  Band 1: P(low)  Band 2: P(medium)  Band 3: P(high)  Band 4: entropy")
 
     # ── 10. Interactive map ────────────────────────────────────────────────
