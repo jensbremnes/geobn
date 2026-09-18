@@ -9,14 +9,11 @@ Bayesian network inference over geospatial data.
 
 ![geobn demo](docs/assets/demo.gif)
 
-`geobn` lets you turn heterogeneous data sources (offline and real-time) into insight over geographical areas by using techniques in probabilistic AI. The library is domain-agnostic, and may be used for, e.g., environmental risk assessment and risk‑informed route planning.
+geobn connects geographic data to a Bayesian network and runs inference at every pixel of a map. Inputs can be local rasters, remote services, point APIs or plain numbers. The output is a posterior probability map for each query node, along with an entropy map. Nothing in the library is domain-specific. Typical uses are environmental risk assessment and risk maps for route planning.
 
-This is achieved by wiring different data sources — rasters, remote APIs, or plain scalars — directly into a Bayesian network, and run pixel-wise inference, producing posterior probability maps and entropy rasters. Under the hood it groups pixels by unique evidence combinations and, for large networks, solves *all* combinations with a single joint query — so inference stays fast even with many evidence nodes over millions of pixels. Static sources can be disk-cached to avoid redundant network fetches, and `bn.precompute()` can pre-solve all evidence combinations into a lookup table, reducing repeated inference calls to pure array indexing. The table can be saved with `bn.save_precomputed()` and loaded on any machine with `bn.load_precomputed()` — no pgmpy required at runtime.
+Pixels are grouped by their combination of evidence states, so each combination is solved once however many pixels share it. When there are many combinations, geobn computes the whole conditional table in one joint query and looks the pixels up in it. Remote sources can be cached on disk. `bn.precompute()` builds the full lookup table ahead of time, and you can save it with `bn.save_precomputed()` and load it on a machine that doesn't need to run pgmpy.
 
-Full docs (API reference, concepts, examples) are hosted at:
-**https://jensbremnes.github.io/geobn**
-
----
+Documentation: **https://jensbremnes.github.io/geobn**
 
 ## Install
 
@@ -24,15 +21,13 @@ Full docs (API reference, concepts, examples) are hosted at:
 pip install geobn
 ```
 
-To also run the bundled examples, clone the repo instead:
+To run the bundled examples, clone the repo:
 
 ```bash
 git clone https://github.com/jensbremnes/geobn.git
 cd geobn
 pip install -e ".[dev]"
 ```
-
----
 
 ## Data sources
 
@@ -45,25 +40,21 @@ pip install -e ".[dev]"
 | `WCSSource(url, layer, valid_range=...)` | Generic OGC WCS endpoint (terrain, bathymetry, …) |
 | `PointGridSource(fn, sample_points, delay)` | Sample any `fn(lat, lon) -> float` over the bounding box with user-defined resolution |
 
----
-
 ## How it works
 
 ```
 DataSources  →  align to grid  →  discretize  →  BN inference  →  InferenceResult
 ```
 
-1. **Load a BN** — `geobn.load("model.bif")` reads a standard `.bif` file via pgmpy.
-2. **Attach sources** — each evidence node gets a `DataSource`. All sources are reprojected and resampled to a common grid at inference time (the georeferenced source with the finest resolution, compared in metres, sets the grid automatically, or call `bn.set_grid()` explicitly).
-3. **Discretize** — `set_discretization(node, breakpoints)` bins continuous values into the discrete states your BN expects.
-4. **Infer** — pixels are grouped by unique evidence combination, never queried individually. The strategy is chosen from the combinations **actually observed on the map** (usually far fewer than the theoretically possible ones): a handful of combinations means a few targeted pgmpy `VariableElimination` queries; many combinations means the full conditional table P(query | evidence) is computed with a *single* joint query and results are mapped to pixels by array indexing. See [How it works](https://jensbremnes.github.io/geobn/concepts/#inference-batching) for details.
-5. **Export** — `InferenceResult` gives you a numpy array, an xarray Dataset, or a multi-band GeoTIFF (N probability bands + entropy).
-
----
+1. Load a network from a `.bif` file with `geobn.load("model.bif")` (read through pgmpy).
+2. Attach a `DataSource` to each evidence node. At inference time, all sources are reprojected and resampled onto one grid. By default this is the grid of the georeferenced source with the finest resolution (compared in metres). You can also set it yourself with `bn.set_grid()`.
+3. Give each continuous input a set of breakpoints with `set_discretization(node, breakpoints)`, so its values map to the node's discrete states.
+4. Run `bn.infer()`. Pixels are grouped by evidence combination and never queried one by one. If the map contains only a few distinct combinations, each gets its own pgmpy `VariableElimination` query. If it contains many, geobn computes P(query | evidence) for all of them in one joint query and indexes into the result. See [How it works](https://jensbremnes.github.io/geobn/concepts/#inference-batching) for the details.
+5. Export the `InferenceResult` as numpy arrays, an xarray Dataset, or a multi-band GeoTIFF (one band per state plus entropy).
 
 ## Usage
 
-The examples below use the bundled Lyngen Alps avalanche risk model (see [`examples/lyngen_alps/`](examples/lyngen_alps/)) and demonstrate all six source types.
+The snippets below are based on the Lyngen Alps avalanche model in [`examples/lyngen_alps/`](examples/lyngen_alps/). They show one of each source type; the example script itself uses only some of them.
 
 ### Loading a network
 
@@ -76,10 +67,10 @@ bn.set_grid("EPSG:4326", resolution=0.005, extent=(19.8, 69.35, 21.0, 69.75))
 
 ### Connecting data sources
 
-Attach a `DataSource` to each evidence node. Sources can be remote services, local files, derived arrays, or plain scalars — they are all reprojected and aligned to a common grid at inference time. DataSource objects are **declarative** — constructing one performs no I/O. Data is fetched lazily when you call `bn.infer()` (or `bn.fetch_raw()` for manual extraction).
+Each evidence node gets a `DataSource`. Creating a source doesn't fetch anything. Data is loaded when you call `bn.infer()`, or `bn.fetch_raw()` if you want the array yourself.
 
 ```python
-# WCSSource — fetch data (e.g., terrain) from WVS server
+# WCSSource: fetch data (e.g. terrain) from a WCS server
 dtm = geobn.WCSSource(
     url="https://hoydedata.no/arcgis/services/las_dtm_somlos/ImageServer/WCSServer",
     layer="las_dtm",
@@ -88,22 +79,22 @@ dtm = geobn.WCSSource(
     cache_dir="cache/",
 )
 
-# Also possible to extract data as raw numpy array, and do own processing
+# You can also fetch the raw numpy array and process it yourself
 dtm_array = bn.fetch_raw(geobn.WCSSource(...))
 slope_deg, sun_exposure = my_custom_function(dtm_array)
 
-# ArraySource (with no CRS) - wire pre-aligned numpy arrays directly
+# ArraySource without a CRS: numpy arrays already on the grid
 bn.set_input("slope_angle",  geobn.ArraySource(slope_deg))
 bn.set_input("sun_exposure", geobn.ArraySource(sun_exposure))
 
-# RasterSource — Reads local GeoTIFF from disk
+# RasterSource: local GeoTIFF
 bn.set_input("forest_cover", geobn.RasterSource("forest_cover.tif"))
 
-# URLSource — remote Cloud-Optimised GeoTIFF
+# URLSource: remote Cloud-Optimised GeoTIFF
 bn.set_input("recent_snow", geobn.URLSource("https://example.com/recent_snow.tif"))
 
-# PointGridSource — sample any fn(lat, lon) -> float over the bounding box
-# Useful for point weather APIs (MET Norway Frost, Open-Meteo, etc.)
+# PointGridSource: sample any fn(lat, lon) -> float over the bounding box.
+# Handy for point weather APIs (MET Norway Frost, Open-Meteo, etc.)
 import requests
 def fetch_wind_speed(lat, lon):
     r = requests.get(f"https://api.example.com/wind?lat={lat}&lon={lon}")
@@ -111,13 +102,13 @@ def fetch_wind_speed(lat, lon):
 
 bn.set_input("wind_load", geobn.PointGridSource(fetch_wind_speed, sample_points=20))
 
-# ConstantSource — broadcast a single scalar over the entire grid
+# ConstantSource: one value for the whole grid
 bn.set_input("temperature", geobn.ConstantSource(-5.0))   # °C
 ```
 
 ### Discretizing continuous inputs
 
-Breakpoints map continuous raster values into the discrete states your BN expects. The number of intervals must match the number of states for that node.
+Breakpoints are bin edges. A node with n states needs n + 1 breakpoints.
 
 ```python
 bn.set_discretization("slope_angle",  [0, 5, 25, 40, 90])          # degrees
@@ -134,14 +125,14 @@ bn.set_discretization("temperature",  [-40, -8, -2, 15])           # °C
 result = bn.infer(query=["avalanche_risk"])
 ```
 
-`infer()` returns an `InferenceResult` with a posterior probability array and entropy map for each queried node.
+The result holds the posterior distribution of each query node at every pixel:
 
 ```python
-probs = result.probabilities["avalanche_risk"]  # (H, W, n_states) — one band per state
-ent   = result.entropy("avalanche_risk")         # (H, W) — Shannon entropy in bits
-p_hi  = result.exceedance("avalanche_risk", "high")  # (H, W) — P(risk >= high)
+probs = result.probabilities["avalanche_risk"]  # (H, W, n_states), one band per state
+ent   = result.entropy("avalanche_risk")         # (H, W), Shannon entropy in bits
+p_hi  = result.exceedance("avalanche_risk", "high")  # (H, W), P(risk >= high)
 
-# State names come directly from the .bif file
+# State names come from the .bif file
 for i, state in enumerate(result.state_names["avalanche_risk"]):
     print(f"P({state}) mean: {probs[..., i].mean():.3f}")
 ```
@@ -156,9 +147,7 @@ result.show_map("out/")     # interactive Leaflet map
 
 ### Caching remote data to disk
 
-`URLSource` and `WCSSource` accept a `cache_dir` argument. When set, fetched data is written to disk as `.npy` files and reused on subsequent runs — **including across Python sessions and script restarts**. No network request is made if a matching cache file already exists.
-
-The cache key is a SHA-256 hash of the URL and request parameters (bounding box, resolution, layer), so changing the grid or source automatically triggers a fresh fetch.
+`URLSource` and `WCSSource` take a `cache_dir` argument. Fetched data is saved there as `.npy` files and reused on later runs, including after a restart. The cache key is a SHA-256 hash of the URL and request parameters (bounding box, resolution, layer), so a different grid or source gets a fresh fetch.
 
 ```python
 dtm = geobn.WCSSource(
@@ -166,55 +155,53 @@ dtm = geobn.WCSSource(
     layer="las_dtm",
     version="1.0.0",
     valid_range=(-500, 9000),
-    cache_dir="cache/",   # survives process restarts
+    cache_dir="cache/",
 )
 
 snow = geobn.URLSource("https://example.com/recent_snow.tif", cache_dir="cache/")
 ```
 
-This is particularly useful when iterating on discretization rules or BN structure — fetch the terrain data once, then experiment freely without waiting for remote requests on every run.
+This helps when you are tuning breakpoints or the network structure, since the terrain only has to be downloaded once.
 
 ### Repeated inference with changing inputs
 
-When static inputs (terrain) are mixed with inputs that change between runs (weather), freeze the static nodes so their arrays are fetched and discretized only once:
+If some inputs are static (terrain) and others change between runs (weather), freeze the static ones. They are then fetched and discretized only once:
 
 ```python
-# Terrain nodes are frozen: fetched and cached on the first infer() call
+# Fetched and cached on the first infer() call
 bn.freeze("slope_angle", "sun_exposure", "forest_cover")
 
-# Sweep over wind scenarios without re-fetching or re-discretizing terrain
 for wind_ms in [3, 8, 20]:
     bn.set_input("wind_load", geobn.ConstantSource(wind_ms))
     result = bn.infer(query=["avalanche_risk"])
     result.to_geotiff(f"out/wind_{wind_ms}ms/")
 ```
 
-For maximum throughput, pre-solve all evidence combinations once and reduce subsequent calls to a numpy index lookup. `bn.precompute()` builds the full conditional table for every combination of discrete evidence states (computed with a single pgmpy joint query, so it is cheap even for large state spaces), and subsequent `bn.infer()` calls resolve each pixel by indexing into that table — no pgmpy inference at runtime.
+To go further, `bn.precompute()` solves every combination of evidence states up front, using one joint pgmpy query. Later `infer()` calls then just index into that table.
 
 ```python
-bn.precompute(query=["avalanche_risk"])  # one-time cost: one joint query covers all state combinations
-result = bn.infer(query=["avalanche_risk"])  # O(H×W) array indexing — no pgmpy at runtime
+bn.precompute(query=["avalanche_risk"])
+result = bn.infer(query=["avalanche_risk"])  # table lookup, no pgmpy queries
 ```
 
-To persist the table for offline deployment, save it after `precompute()` and load it on the target machine — no pgmpy inference runs at load or infer time:
+You can save the table and load it on another machine, for example a robot. No pgmpy inference runs there:
 
 ```python
-# Workstation: build and save
+# Workstation
 bn.precompute(query=["avalanche_risk"])
 bn.save_precomputed("avalanche_table.npz")
 
-# Robot / edge device: load and infer
+# Target machine
 bn.load_precomputed("avalanche_table.npz")
-result = bn.infer(query=["avalanche_risk"])  # pure numpy, no pgmpy
+result = bn.infer(query=["avalanche_risk"])
 ```
-
----
 
 ## Examples
 
 | Example | Description |
 |---|---|
-| [`examples/lyngen_alps/`](examples/lyngen_alps/) | Avalanche risk: Kartverket DTM via WCSSource + configurable weather, Lyngen Alps, Norway |
+| [`examples/lyngen_alps/`](examples/lyngen_alps/) | Avalanche risk from the Kartverket DTM (WCS) and configurable weather, Lyngen Alps, Norway |
+| [`examples/karmsundet/`](examples/karmsundet/) | USV risk from EMODnet bathymetry, AIS traffic density and live MET Norway forecasts, Karmsundet, Norway |
 
 Run from the repo root:
 
@@ -222,26 +209,18 @@ Run from the repo root:
 python examples/lyngen_alps/run_example.py
 ```
 
----
-
 ## Contributing
 
-Contributions are welcome! Whether it's a bug report, new data source, documentation fix, or feature idea — feel free to open an issue or pull request.
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions and guidelines.
-
----
+Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup.
 
 ## Academic foundation
 
-`geobn` is a software realisation of ideas developed during the author's PhD research. If you use this library in academic work, please consider citing the following paper:
+geobn builds on ideas from the author's PhD research. If you use it in academic work, please cite:
 
 > J. E. Bremnes, I. B. Utne, T. R. Krogstad, and A. J. Sørensen,
 > "Holistic Risk Modeling and Path Planning for Marine Robotics,"
 > *IEEE Journal of Oceanic Engineering*, vol. 50, no. 1, pp. 252–275, 2025.
 > DOI: [10.1109/JOE.2024.3432935](https://doi.org/10.1109/JOE.2024.3432935)
-
----
 
 ## Declaration of AI use
 

@@ -1,4 +1,4 @@
-# Core Sources
+# Core sources
 
 ## ArraySource
 
@@ -6,7 +6,7 @@
     options:
       show_root_heading: true
 
-**Example — with CRS metadata (full georeferencing):**
+With CRS metadata (fully georeferenced):
 
 ```python
 import numpy as np
@@ -17,17 +17,15 @@ transform = Affine(0.01, 0, 10.0, 0, -0.01, 70.0)
 source = geobn.ArraySource(slope, crs="EPSG:4326", transform=transform)
 ```
 
-**Example — pre-aligned array (no CRS needed):**
+A pre-aligned array, without CRS:
 
 ```python
-# After fetching a DEM and computing slope analytically, the result
-# is already on the BN grid — pass it directly without CRS metadata.
+# Slope computed from a DEM fetched with fetch_raw() is already on the
+# BN grid, so it can be passed without CRS metadata.
 dem = bn.fetch_raw(geobn.WCSSource(...))
 slope_deg = compute_slope(dem)   # same shape as the BN grid
 bn.set_input("slope_angle", geobn.ArraySource(slope_deg))
 ```
-
----
 
 ## ConstantSource
 
@@ -35,15 +33,11 @@ bn.set_input("slope_angle", geobn.ArraySource(slope_deg))
     options:
       show_root_heading: true
 
-**Example:**
-
 ```python
-# Apply a uniform 30 cm recent snowfall across the entire domain
+# 30 cm of recent snow everywhere
 source = geobn.ConstantSource(30.0)
 bn.set_input("recent_snow", source)
 ```
-
----
 
 ## RasterSource
 
@@ -51,14 +45,10 @@ bn.set_input("recent_snow", source)
     options:
       show_root_heading: true
 
-**Example:**
-
 ```python
 source = geobn.RasterSource("dem_10m.tif")
 bn.set_input("elevation", source)
 ```
-
----
 
 ## URLSource
 
@@ -66,9 +56,7 @@ bn.set_input("elevation", source)
     options:
       show_root_heading: true
 
-Supports optional disk caching.
-
-**Example:**
+Pass `cache_dir` to cache downloads on disk:
 
 ```python
 source = geobn.URLSource(
@@ -78,18 +66,16 @@ source = geobn.URLSource(
 bn.set_input("slope_angle", source)
 ```
 
----
-
 ## PointGridSource
 
 ::: geobn.PointGridSource
     options:
       show_root_heading: true
 
-`PointGridSource` is the generic primitive for any point-queryable data source.
-Pass any callable that accepts `(lat, lon)` and returns a float.
+`PointGridSource` works with any data you can query by point. Give it a callable
+that takes `(lat, lon)` and returns a float.
 
-**Example — Open-Meteo precipitation:**
+Open-Meteo precipitation:
 
 ```python
 import requests
@@ -118,7 +104,7 @@ source = geobn.PointGridSource(fn=fetch_precipitation, sample_points=5)
 bn.set_input("precipitation", source)
 ```
 
-**Example — MET Norway ocean forecast:**
+MET Norway ocean forecast:
 
 ```python
 import requests

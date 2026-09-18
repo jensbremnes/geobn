@@ -1,7 +1,7 @@
 # GeoBayesianNetwork
 
-The primary user-facing class. Load a `.bif` file with `geobn.load()`, attach data
-sources to evidence nodes, configure discretization, and call `infer()`.
+The main class. Load a `.bif` file with `geobn.load()`, attach data sources to the
+evidence nodes, set their discretization and call `infer()`.
 
 ## Factory function
 
@@ -27,10 +27,9 @@ sources to evidence nodes, configure discretization, and call `infer()`.
         - clear_cache
         - infer
 
----
 
 ## Real-time optimisation
 
-For repeated inference with static terrain inputs or pre-computed state tables,
-see the dedicated [Real-time optimisation](realtime.md) guide covering
-`freeze()`, `precompute()`, and `clear_cache()`.
+For repeated inference with static inputs or precomputed tables, see
+[Real-time optimisation](realtime.md), which covers `freeze()`, `precompute()` and
+`clear_cache()`.

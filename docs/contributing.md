@@ -1,36 +1,32 @@
 # Contributing
 
-## Dev setup
+## Setup
 
 ```bash
 git clone https://github.com/jensbremnes/geobn.git
 cd geobn
-pip install -e ".[dev]"
+uv sync --frozen
 ```
 
-The `dev` extra adds pytest to the standard install.
+Without uv, use `pip install -e ".[dev]"`.
 
 ## Running tests
 
 ```bash
-pytest tests/ -v
+uv run --frozen --with pytest python -m pytest tests/
 ```
 
-All 101 tests must pass before committing. Tests are fully offline — no real network
-calls are made (HTTP sources are mocked with `unittest.mock.patch`).
-
-### Test conventions
-
-- Fixtures live in `tests/conftest.py`.
-- Use `unittest.mock.patch("requests.get", ...)` to mock HTTP sources.
+The tests run offline. HTTP sources are mocked with `unittest.mock.patch`, and shared
+fixtures live in `tests/conftest.py`.
 
 ## Adding a new data source
 
-1. Create `src/geobn/sources/my_source.py` following the `DataSource` ABC.
-2. Export from `src/geobn/sources/__init__.py` and `src/geobn/__init__.py`.
+1. Create `src/geobn/sources/my_source.py`, subclassing `DataSource`.
+2. Export it from `src/geobn/sources/__init__.py` and `src/geobn/__init__.py`.
 3. Add tests to `tests/test_sources.py`.
+4. Add a `:::` mkdocstrings directive to the right page in `docs/api/sources/`.
 
-Every source must implement:
+A source implements one method:
 
 ```python
 class MySource(DataSource):
@@ -38,38 +34,27 @@ class MySource(DataSource):
         ...
 ```
 
-If the source requires credentials, validate them in `__init__()` before `fetch()` is called.
+If the source needs credentials, check them in `__init__()` so that a missing key
+fails early instead of inside `fetch()`.
 
-## Building docs locally
+## Building the docs
 
 ```bash
 pip install -e ".[docs]"
-mkdocs serve
-# Browse at http://127.0.0.1:8000
+mkdocs serve   # browse at http://127.0.0.1:8000
 ```
 
-Build static site and check for broken links:
+Before pushing doc changes, run:
 
 ```bash
 mkdocs build --strict
 ```
 
-The `--strict` flag treats mkdocstrings warnings (missing symbols, broken links) as
-errors.
+`--strict` turns mkdocstrings warnings (missing symbols, broken links) into errors.
 
-## Git workflow
+## Pull requests
 
-After completing any meaningful unit of work, commit and push:
-
-```bash
-git add <specific files>
-git commit -m "concise present-tense description"
-git push origin main
-```
-
-Rules:
-- Stage only relevant files (never `git add -A` blindly)
-- Write concise, present-tense commit messages: `"add WCSSource"`, `"fix nodata sentinel"`
-- Always run `pytest tests/ -v` before committing
-
-GitHub Actions deploys docs automatically on push to `main`.
+Work on a branch and open a pull request against `main`. Stage only the files that
+belong to the change, and keep commit messages short and in the present tense
+(`add WCSSource`, `fix nodata sentinel`). The docs site is deployed by GitHub Actions
+when changes land on `main`.

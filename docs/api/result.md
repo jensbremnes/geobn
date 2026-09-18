@@ -1,9 +1,9 @@
 # InferenceResult
 
-The object returned by [`GeoBayesianNetwork.infer()`][geobn.GeoBayesianNetwork.infer].
+Returned by [`GeoBayesianNetwork.infer()`][geobn.GeoBayesianNetwork.infer].
 
-Holds per-pixel probability distributions for one or more query nodes. The spatial
-metadata (`crs`, `transform`) mirrors the reference grid used during inference.
+It holds the per-pixel probability distributions of one or more query nodes. `crs`
+and `transform` describe the reference grid used for inference.
 
 ## Class reference
 
@@ -29,9 +29,9 @@ metadata (`crs`, `transform`) mirrors the reference grid used during inference.
 ## Summary layers
 
 Each method reduces the per-pixel distribution of one query node to a single
-`(H, W)` float32 map. Pixels with NoData input are NaN. State indices follow the
-order in `state_names[node]`, so order the states from least to most severe for
-`exceedance` and `quantile` to make sense.
+`(H, W)` float32 map. Pixels with NoData input are NaN. State indices follow
+`state_names[node]`. `exceedance` and `quantile` assume the states are ordered from
+least to most severe.
 
 For a pixel with P(low, medium, high) = (0.2, 0.5, 0.3):
 
@@ -46,10 +46,10 @@ For a pixel with P(low, medium, high) = (0.2, 0.5, 0.3):
 | `quantile(node, q)` | Lowest state k with P(node ≤ k) ≥ q: the worst state at confidence q | `0.95` → 2 (high) |
 
 `values` is either a list in state order or a dict keyed by state name
-(`{"low": 10, "medium": 50, "high": 90}`), which guards against order mistakes.
-geobn does not choose these numbers; they are your consequence scores or costs.
+(`{"low": 10, "medium": 50, "high": 90}`). The dict form protects against getting
+the order wrong. The numbers are your own consequence scores or costs.
 
-Pass summary maps (or any other `(H, W)` array on the result grid) to the exporters:
+Summary maps, or any other `(H, W)` array on the result grid, can be passed to the exporters:
 
 ```python
 score = result.expected_value("usv_risk", {"low": 10, "medium": 50, "high": 90})
@@ -59,8 +59,7 @@ ds = result.to_xarray(layers={"risk_score": score})      # adds a (y, x) variabl
 
 ## Band layout in GeoTIFF output
 
-When calling `to_geotiff(output_dir)`, one multi-band GeoTIFF is written per query
-node:
+`to_geotiff(output_dir)` writes one multi-band GeoTIFF per query node:
 
 | Band | Content |
 |------|---------|

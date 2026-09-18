@@ -1,11 +1,11 @@
 # geobn
 
-**Pixel-wise Bayesian network inference over geospatial data.**
+Pixel-wise Bayesian network inference over geospatial data.
 
-geobn lets you connect a Bayesian network (BN) to geographic data sources and run
-posterior-probability inference at every pixel of a raster grid. Each pixel is
-treated as an independent evidence vector; the BN returns a full probability
-distribution over the query node states, plus Shannon entropy.
+geobn connects a Bayesian network (BN) to geographic data sources and runs inference
+at every pixel of a raster grid. Each pixel is an independent set of evidence. The
+result is a posterior distribution over the states of each query node, plus a Shannon
+entropy map.
 
 ```python
 import geobn
@@ -28,20 +28,20 @@ result.show_map()          # interactive Leaflet map
 result.to_geotiff("out/")  # multi-band GeoTIFF per query node
 ```
 
-## Why geobn?
+## Features
 
-- **No special GIS knowledge required** — wire any Python data source to a BN node.
-- **Pure-Python reprojection** — numpy + pyproj only; no rasterio needed for grid alignment.
-- **NaN-aware** — NoData pixels are excluded from inference and stay NaN in outputs.
-- **Efficient batching** — pixels are grouped by unique evidence combination, and
-  large state spaces are solved with a single joint query instead of one query per
-  combination — scales to networks with many evidence nodes.
-- **Real-time ready** — freeze static inputs (terrain), precompute lookup tables for
-  sub-millisecond per-pixel inference in streaming scenarios.
+- Any Python data source can feed a BN node: rasters, WCS services, point APIs or
+  constants.
+- Reprojection and resampling onto the common grid use only numpy and pyproj.
+- NoData pixels are left out of inference and stay NaN in the outputs.
+- Pixels are grouped by evidence combination. When there are many combinations, they
+  are all solved in one joint query, so networks with many evidence nodes stay fast.
+- For repeated runs you can freeze static inputs such as terrain, or precompute a
+  lookup table so that inference becomes array indexing.
 
 ## Next steps
 
-- [Installation](installation.md) — install the right extras for your use case
-- [How it works](concepts.md) — pipeline diagram and core concepts
-- [Lyngen Alps example](examples/lyngen_alps.md) — avalanche risk over real Norwegian terrain
-- [API Reference](api/network.md) — full class and method documentation
+- [Installation](installation.md)
+- [How it works](concepts.md): the pipeline and the main concepts
+- [Lyngen Alps example](examples/lyngen_alps.md): avalanche risk over Norwegian terrain
+- [API Reference](api/network.md)
