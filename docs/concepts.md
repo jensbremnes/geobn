@@ -128,11 +128,20 @@ observed count — the size of the theoretical state space costs nothing by itse
 
 ### Step 2 — choose a strategy
 
-**Few observed combinations (≤ 200): per-combination queries.** One pgmpy
-`VariableElimination` query runs per observed combination (a single elimination pass
-shared across all query nodes). For a 500×500 grid with 3 evidence nodes (3 states
-each) there are at most 27 combinations regardless of grid size — a handful of
-targeted queries is the cheapest possible approach.
+**Few observed combinations (≤ 200): per-combination queries.** pgmpy
+`VariableElimination` queries run per observed combination. For a 500×500 grid with
+3 evidence nodes (3 states each) there are at most 27 combinations regardless of grid
+size — a handful of targeted queries is the cheapest possible approach.
+
+Within one combination, how the query nodes are requested depends on the size of
+their joint table (the product of their state counts). pgmpy computes the full joint
+over all requested nodes before splitting it into per-node marginals, so:
+
+- **Small joint (≤ 20,000 cells):** all query nodes in one pgmpy call, which shares
+  the elimination work (up to ~3× faster than separate calls).
+- **Large joint:** one pgmpy call per query node. The joint grows multiplicatively
+  with every query node — 19 query nodes with 2–5 states each is 192 million cells —
+  while separate calls grow linearly (10 s vs 32 ms per combination in that case).
 
 **Many observed combinations: one joint query.** Asking thousands of nearly
 identical questions repeats the same internal propagation work each time. Instead,
@@ -164,8 +173,16 @@ pays for combinations that actually occur.
 | many | no | per-combination queries | proportional to observed combos |
 
 In all cases the per-combination results are scattered back to the original pixel
-positions, and evidence combinations with zero prior probability yield NaN
-posteriors.
+positions.
+
+**Impossible evidence.** When an evidence combination has probability zero (e.g. an
+input observed in a state whose prior is 0), the posterior is undefined and *every*
+query node gets NaN, on every path. pgmpy on its own would still return numbers for
+query nodes it can prune away from the contradiction, so geobn checks P(evidence)
+explicitly: the product of the priors for root inputs, and the chain rule
+P(e₁)·P(e₂ | e₁)·… for any other evidence. `infer()` and `query_batch()` also emit a
+`UserWarning` naming the observed states with prior 0 and the number of affected
+pixels or points, since a zero prior on an input is often a modelling slip.
 
 ## Output
 

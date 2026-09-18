@@ -14,7 +14,13 @@ from pgmpy.models import DiscreteBayesianNetwork
 
 from .discretize import DiscretizationSpec, discretize_array
 from .grid import GridSpec, _pixel_size_m, align_to_grid
-from .inference import build_conditional_table, run_inference, run_inference_from_table
+from .inference import (
+    _query_marginals,
+    _root_priors,
+    build_conditional_table,
+    run_inference,
+    run_inference_from_table,
+)
 from .result import InferenceResult
 from .sources._base import DataSource
 
@@ -349,14 +355,15 @@ class GeoBayesianNetwork:
                 n_q = len(query_state_names[qnode])
                 tables[qnode] = np.zeros(n_states_per_node + [n_q], dtype=np.float32)
 
+            root_priors = _root_priors(self._model)
             for idx_combo in itertools.product(*[range(k) for k in n_states_per_node]):
                 evidence = {
                     node_order[i]: state_names_per_node[node_order[i]][idx_combo[i]]
                     for i in range(len(node_order))
                 }
-                for qnode in query:
-                    factor = ve.query([qnode], evidence=evidence, show_progress=False)
-                    tables[qnode][idx_combo] = factor.values.astype(np.float32)
+                marginals = _query_marginals(ve, self._model, query, evidence, root_priors)
+                for qnode in tables:
+                    tables[qnode][idx_combo] = marginals[qnode]
 
         self._inference_table = tables
         self._evidence_nodes = node_order
@@ -708,6 +715,11 @@ class GeoBayesianNetwork:
             probs = self._inference_table[qnode][tuple(index_arrays)].astype(np.float32)
             probs[invalid] = np.nan
             out[qnode] = probs
+        if query:
+            impossible = ~invalid & np.isnan(out[query[0]]).all(axis=-1)
+            self._warn_impossible_evidence(
+                dict(zip(self._evidence_nodes, index_arrays)), impossible, "point(s)"
+            )
         return out
 
     @staticmethod
@@ -938,6 +950,9 @@ class GeoBayesianNetwork:
                 ve=self._cached_ve,
             )
 
+        impossible = ~nodata_mask & np.isnan(probabilities[query[0]]).all(axis=-1)
+        self._warn_impossible_evidence(evidence_state_grids, impossible, "pixel(s)")
+
         n_valid = int((~nodata_mask).sum())
         _log.info(
             "Inference complete: %d×%d pixels, %d valid",
@@ -949,6 +964,41 @@ class GeoBayesianNetwork:
             state_names=query_state_names,
             crs=ref_grid.crs,
             transform=ref_grid.transform,
+        )
+
+    def _warn_impossible_evidence(
+        self,
+        state_indices: dict[str, np.ndarray],
+        impossible: np.ndarray,
+        unit: str,
+    ) -> None:
+        """Warn when valid pixels/points got NaN because P(evidence) == 0.
+
+        *state_indices* maps each input node to its state indices (BN state
+        order) with the same shape as *impossible*.  The message names the
+        observed states whose prior is zero, the usual cause.
+        """
+        n_impossible = int(impossible.sum())
+        if n_impossible == 0:
+            return
+        causes = []
+        for node, indices in state_indices.items():
+            if list(self._model.predecessors(node)):
+                continue
+            prior = self._model.get_cpds(node).get_values()[:, 0]
+            states = self._bn_state_names(node)
+            observed = np.unique(np.asarray(indices)[impossible])
+            causes += [f"{node}='{states[i]}'" for i in observed if prior[i] == 0]
+        reason = (
+            f"the model gives {', '.join(causes)} a prior probability of 0"
+            if causes
+            else "the observed states contradict each other in the model"
+        )
+        warnings.warn(
+            f"{n_impossible} {unit} have evidence with probability zero ({reason}); "
+            "their posteriors are undefined and set to NaN.",
+            UserWarning,
+            stacklevel=3,
         )
 
     # ------------------------------------------------------------------
