@@ -10,10 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `save_precomputed(path)` and `load_precomputed(path)` methods on `GeoBayesianNetwork` — serialize the precomputed lookup table to a portable `.npz` file for offline→runtime deployment.
 - `query_point(evidence)` and `query_batch(evidence)` on `GeoBayesianNetwork`: posteriors for single points or batches of points, looked up directly in the precomputed table without a grid. Evidence may be numbers or state names; NaN gives NaN probabilities.
+- `set_discretization(..., out_of_range="clip" | "nan")`: choose whether values outside `[breakpoints[0], breakpoints[-1]]` are clipped to the first/last state (default, unchanged behaviour) or treated as NoData.
 
 ### Fixed
 - `RasterSource`, `URLSource` and `WCSSource` now convert the GeoTIFF's declared nodata value (and internal masks) to NaN. Previously nodata sentinels such as −9999 were discretized as real values, producing confident but wrong posteriors.
 - An `ArraySource` without CRS whose shape does not match the grid now raises `ValueError`. Previously it was silently broadcast from its first value.
+- `docs/concepts.md` wrongly said that values outside the breakpoint range become NaN; they are clipped unless `out_of_range="nan"` is set.
 - Automatic reference-grid selection now compares pixel sizes in metres instead of CRS units. Previously a 0.001° WGS84 source (~80 m) was chosen over a 10 m UTM source, downsampling the finer data.
 
 ### Changed

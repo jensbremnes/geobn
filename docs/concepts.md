@@ -63,8 +63,25 @@ bn.set_discretization(
 )
 ```
 
-`breakpoints` must have `len(labels) + 1` values. Pixels outside `[breakpoints[0],
-breakpoints[-1]]` become NaN (no inference).
+`breakpoints` must have `len(labels) + 1` values. The interior values are the bin
+edges; a value exactly on an edge goes to the upper bin.
+
+The first and last breakpoints define the valid range `[breakpoints[0], breakpoints[-1]]`
+(inclusive). By default (`out_of_range="clip"`), values outside it are assigned to the
+first or last state, so a slope of 95° counts as `"extreme"`. Pass
+`out_of_range="nan"` to treat them as NoData instead:
+
+```python
+bn.set_discretization(
+    "slope_angle",
+    breakpoints=[0, 25, 40, 90],
+    labels=["gentle", "steep", "extreme"],
+    out_of_range="nan",   # values < 0 or > 90 → NaN output
+)
+```
+
+This is useful when out-of-range values mean bad data (sensor errors, fill values)
+rather than extreme conditions.
 
 ## NaN / NoData propagation
 
@@ -75,6 +92,7 @@ This means:
 - Pixels outside WCS coverage → NaN inputs → NaN outputs
 - Sea pixels in a land DEM → NaN depth → NaN output
 - Invalid sensor readings → NaN evidence → NaN posteriors
+- Values outside the breakpoint range with `out_of_range="nan"` → NaN posteriors
 - File nodata → NaN: `RasterSource`, `URLSource` and `WCSSource` automatically convert
   pixels matching the GeoTIFF's declared nodata value (or its internal mask) to NaN
 
