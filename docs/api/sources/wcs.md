@@ -17,6 +17,17 @@ client. It supports WCS 2.0.1, 1.1.1, and 1.0.0.
 ...&SUBSET=Lat(lat_min,lat_max)&SUBSET=Long(lon_min,lon_max)
 ```
 
+The bounds are in EPSG:4326 (`SUBSETTINGCRS`). `Lat`/`Long` are the default axis
+labels; servers that name the axes differently (e.g. `lat`/`lon` or `y`/`x`) reject
+this request. Pass `axis_labels=(lon_label, lat_label)` to match the server:
+
+```python
+source = geobn.WCSSource(url, layer="my_coverage", axis_labels=("lon", "lat"))
+```
+
+The axis names are listed in the server's DescribeCoverage response.
+`extra_subsets` adds further subsets, e.g. `['time("2023-01-01T00:00:00.000Z")']`.
+
 **WCS 1.1.1** uses a `BBOX` parameter.
 
 **WCS 1.0.0** uses `COVERAGE`, `BBOX`, `WIDTH`, and `HEIGHT` parameters
@@ -32,7 +43,8 @@ numbers without declaring it.
 ### Disk caching
 
 Pass `cache_dir` to cache responses to disk. The cache key is a SHA-256 hash of the
-request URL and parameters, plus an internal cache-format version (bumped when cached
+request URL and parameters (bounding box, output size, format, axis labels, extra
+subsets and `valid_range`), plus an internal cache-format version (bumped when cached
 content semantics change, so outdated entries are refetched). Corrupt or missing cache
 entries trigger a fresh request.
 

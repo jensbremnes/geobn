@@ -294,3 +294,50 @@ def test_wcs_source_masks_declared_nodata_without_valid_range(small_grid):
 
     assert data.array[0, 0] == pytest.approx(100.0)
     assert np.isnan(data.array[0, 1])
+
+
+# ---------------------------------------------------------------------------
+# WCSSource — WCS 2.0 subset axis labels
+# ---------------------------------------------------------------------------
+
+def _wcs_subsets(source, grid):
+    """Fetch with a mocked response and return the SUBSET params sent."""
+    response = _mock_wcs_response(_make_geotiff_bytes(np.ones((2, 2), np.float32)))
+    with patch("requests.get", return_value=response) as mock_get:
+        source.fetch(grid=grid)
+    return mock_get.call_args.kwargs["params"]["SUBSET"]
+
+
+def test_wcs_v2_default_axis_labels(small_grid):
+    lon_min, lat_min, lon_max, lat_max = small_grid.extent_wgs84()
+    subsets = _wcs_subsets(WCSSource("https://example.com/wcs", "cov"), small_grid)
+    assert subsets == [f"Lat({lat_min},{lat_max})", f"Long({lon_min},{lon_max})"]
+
+
+def test_wcs_v2_custom_axis_labels(small_grid):
+    lon_min, lat_min, lon_max, lat_max = small_grid.extent_wgs84()
+    source = WCSSource(
+        "https://example.com/wcs", "cov",
+        axis_labels=("x", "y"),
+        extra_subsets=['time("2023-01-01T00:00:00.000Z")'],
+    )
+    subsets = _wcs_subsets(source, small_grid)
+    assert subsets == [
+        f"y({lat_min},{lat_max})",
+        f"x({lon_min},{lon_max})",
+        'time("2023-01-01T00:00:00.000Z")',
+    ]
+
+
+def test_wcs_v1_ignores_axis_labels(small_grid):
+    source = WCSSource("https://example.com/wcs", "cov", version="1.0.0", axis_labels=("x", "y"))
+    response = _mock_wcs_response(_make_geotiff_bytes(np.ones((2, 2), np.float32)))
+    with patch("requests.get", return_value=response) as mock_get:
+        source.fetch(grid=small_grid)
+    assert "SUBSET" not in mock_get.call_args.kwargs["params"]
+
+
+@pytest.mark.parametrize("labels", [("x",), ("x", "y", "z"), ("x", ""), ("x", 1), "xy"])
+def test_wcs_invalid_axis_labels_raise(labels):
+    with pytest.raises(ValueError, match="axis_labels"):
+        WCSSource("https://example.com/wcs", "cov", axis_labels=labels)

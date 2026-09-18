@@ -97,6 +97,37 @@ class TestWCSSourceCache:
         assert len(list(tmp_path.glob("*.npy"))) == 2
 
 
+    def test_default_cache_key_unchanged(self):
+        """Default options keep the pre-0.8 key, so existing cache entries stay valid."""
+        src = WCSSource("http://x.com/wcs", "layer")
+        assert src._cache_key(5.0, 61.5, 5.5, 62.0, 5, 5) == {
+            "url": "http://x.com/wcs", "layer": "layer", "version": "2.0.1",
+            "lon_min": 5.0, "lat_min": 61.5, "lon_max": 5.5, "lat_max": 62.0,
+            "H": 5, "W": 5,
+        }
+
+    @pytest.mark.parametrize("kwargs", [
+        {"extra_subsets": ['time("2023-01-01T00:00:00.000Z")']},
+        {"valid_range": (0.0, 100.0)},
+        {"format": "application/x-geotiff"},
+        {"axis_labels": ("lon", "lat")},
+    ])
+    def test_request_options_get_own_cache_entry(self, small_grid, tmp_path, kwargs):
+        tiff_a = _make_tiff_bytes(np.full((5, 5), 1.0, np.float32))
+        tiff_b = _make_tiff_bytes(np.full((5, 5), 2.0, np.float32))
+        responses = iter([
+            MagicMock(ok=True, content=tiff_a),
+            MagicMock(ok=True, content=tiff_b),
+        ])
+        with patch("requests.get", side_effect=lambda *a, **kw: next(responses)) as mock_get:
+            data_a = WCSSource("http://x.com/wcs", "layer", cache_dir=tmp_path).fetch(grid=small_grid)
+            data_b = WCSSource("http://x.com/wcs", "layer", cache_dir=tmp_path, **kwargs).fetch(grid=small_grid)
+        assert mock_get.call_count == 2
+        assert data_a.array.mean() == pytest.approx(1.0)
+        assert data_b.array.mean() == pytest.approx(2.0)
+        assert len(list(tmp_path.glob("*.npy"))) == 2
+
+
 class TestURLSourceCache:
     def test_cache_hit_skips_network(self, tmp_path):
         tiff = _make_tiff_bytes(np.ones((5, 5), np.float32) * 3.0)
