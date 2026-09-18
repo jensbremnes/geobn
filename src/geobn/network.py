@@ -442,6 +442,185 @@ class GeoBayesianNetwork:
         )
 
     # ------------------------------------------------------------------
+    # Point queries
+    # ------------------------------------------------------------------
+
+    def query_point(
+        self,
+        evidence: dict[str, float | str],
+        query: list[str] | None = None,
+    ) -> dict[str, dict[str, float]]:
+        """Posterior distributions for a single evidence point.
+
+        After :meth:`precompute` (or :meth:`load_precomputed`), this is a pure
+        numpy lookup in the precomputed table: no pgmpy inference runs, and
+        no grid or data sources are involved.
+
+        Parameters
+        ----------
+        evidence:
+            One value per input node (every node passed to :meth:`set_input`).
+            Values may be state names (``"steep"``) or numbers, which are
+            discretized with the node's :meth:`set_discretization` spec.
+            A NaN value gives NaN probabilities, as in :meth:`infer`.
+        query:
+            Query nodes to return.  Defaults to the nodes passed to
+            :meth:`precompute`; must be a subset of them.
+
+        Returns
+        -------
+        dict
+            ``{query_node: {state_name: probability}}``.
+
+        Raises
+        ------
+        RuntimeError
+            If no precomputed table is available.
+        ValueError
+            On missing evidence, unknown state names, sequence-valued
+            evidence, or a query node that was not precomputed.
+
+        Example
+        -------
+        >>> bn.precompute(query=["fire_risk"])
+        >>> bn.query_point({"slope": 35.0, "rainfall": "high"})
+        {'fire_risk': {'low': 0.2, 'medium': 0.3, 'high': 0.5}}
+        """
+        for node, value in evidence.items():
+            if not isinstance(value, str) and np.ndim(value) > 0:
+                raise ValueError(
+                    f"Evidence for '{node}' must be a single value; "
+                    "use query_batch() for multiple points."
+                )
+        batch = self.query_batch(evidence, query)
+        return {
+            qnode: {
+                state: float(p)
+                for state, p in zip(self._model.get_cpds(qnode).state_names[qnode], probs[0])
+            }
+            for qnode, probs in batch.items()
+        }
+
+    def query_batch(
+        self,
+        evidence: dict[str, Any],
+        query: list[str] | None = None,
+    ) -> dict[str, np.ndarray]:
+        """Posterior distributions for K evidence points at once.
+
+        Like :meth:`query_point`, but vectorized: a pure numpy lookup in the
+        precomputed table.
+
+        Parameters
+        ----------
+        evidence:
+            One entry per input node.  An entry is either a sequence of K
+            values (list, tuple or array) or a single value that applies to
+            all K points.  Values may be numbers (discretized with the node's
+            spec) or state names, but not both in one sequence.  NaN values
+            give a NaN row for that point.
+        query:
+            Query nodes to return.  Defaults to the nodes passed to
+            :meth:`precompute`; must be a subset of them.
+
+        Returns
+        -------
+        dict
+            ``{query_node: (K, n_states) float32 array}`` with state order
+            matching the BN definition.
+
+        Raises
+        ------
+        RuntimeError
+            If no precomputed table is available.
+        ValueError
+            On missing evidence, unknown state names, sequences of different
+            lengths, or a query node that was not precomputed.
+        """
+        if not self._inference_table:
+            raise RuntimeError(
+                "No precomputed table.  Call precompute(query) or "
+                "load_precomputed(path) first."
+            )
+        query = self._validate_point_query(query)
+        missing = [n for n in self._evidence_nodes if n not in evidence]
+        if missing:
+            raise ValueError(f"Missing evidence for node(s): {missing}")
+
+        values = {n: self._as_evidence_array(n, evidence[n]) for n in self._evidence_nodes}
+        lengths = {len(v) for v in values.values() if v.ndim == 1}
+        if len(lengths) > 1:
+            raise ValueError(f"Evidence sequences have mismatched lengths: {sorted(lengths)}")
+        k = lengths.pop() if lengths else 1
+
+        index_arrays: list[np.ndarray] = []
+        invalid = np.zeros(k, dtype=bool)
+        for node in self._evidence_nodes:
+            idx = np.broadcast_to(self._evidence_state_indices(node, values[node]), (k,))
+            invalid |= idx < 0
+            index_arrays.append(np.clip(idx, 0, None))
+
+        out: dict[str, np.ndarray] = {}
+        for qnode in query:
+            probs = self._inference_table[qnode][tuple(index_arrays)].astype(np.float32)
+            probs[invalid] = np.nan
+            out[qnode] = probs
+        return out
+
+    @staticmethod
+    def _as_evidence_array(node: str, value: Any) -> np.ndarray:
+        """Convert one evidence entry to a 0-d or 1-d array of numbers or state names."""
+        # Lists go through object dtype so numpy doesn't coerce [5.0, "steep"] to strings
+        arr = np.array(value, dtype=object) if isinstance(value, (list, tuple)) else np.asarray(value)
+        if arr.ndim > 1:
+            raise ValueError(f"Evidence for '{node}' must be a single value or a 1-D sequence.")
+        if arr.dtype.kind in "iufb":
+            return arr.astype(float)
+        if arr.dtype.kind == "U":
+            return arr
+        if arr.dtype.kind == "O":
+            if all(isinstance(v, str) for v in arr.flat):
+                return arr.astype(str)
+            if all(isinstance(v, (int, float, np.number)) for v in arr.flat):
+                return arr.astype(float)
+        raise ValueError(
+            f"Evidence for '{node}' must be numbers or state names, not a mix of both."
+        )
+
+    def _evidence_state_indices(self, node: str, values: np.ndarray) -> np.ndarray:
+        """Map evidence values (numbers or state names) to state indices; NaN → -1."""
+        if values.dtype.kind == "U":
+            state_names = list(self._model.get_cpds(node).state_names[node])
+            unknown = sorted({str(v) for v in values.flat} - set(state_names))
+            if unknown:
+                raise ValueError(
+                    f"Unknown state(s) {unknown} for node '{node}'.  "
+                    f"Expected one of {state_names}."
+                )
+            lookup = {s: i for i, s in enumerate(state_names)}
+            return np.vectorize(lookup.__getitem__, otypes=[int])(values)
+        spec = self._discretizations.get(node)
+        if spec is None:
+            raise ValueError(
+                f"Numeric evidence for '{node}' requires a discretization.  "
+                f"Call set_discretization('{node}', breakpoints, labels) or pass "
+                "state names instead."
+            )
+        flat = discretize_array(values.reshape(1, -1), spec)[0]
+        return flat.reshape(values.shape).astype(int)
+
+    def _validate_point_query(self, query: list[str] | None) -> list[str]:
+        if query is None:
+            return list(self._query_nodes)
+        unknown = [q for q in query if q not in self._query_nodes]
+        if unknown:
+            raise ValueError(
+                f"Query node(s) {unknown} were not precomputed.  "
+                f"Precomputed query nodes: {self._query_nodes}."
+            )
+        return list(query)
+
+    # ------------------------------------------------------------------
     # Inference
     # ------------------------------------------------------------------
 
