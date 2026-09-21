@@ -74,6 +74,16 @@ class GeoBayesianNetwork:
         result = bn.infer(query=["fire_risk"])
         result.to_geotiff("output/")
 
+    :func:`load` reads ``.bif``, ``.xmlbif``, ``.xml``, ``.net``, ``.xdsl`` and
+    ``.uai``. A pgmpy model can also be wrapped directly, which covers models
+    built in code, fitted with pgmpy's estimators, or read with a pgmpy reader
+    that :func:`load` does not dispatch on::
+
+        from pgmpy.readwrite import XBNReader
+
+        model = XBNReader("model.dat").get_model()
+        bn = geobn.GeoBayesianNetwork(model)
+
     Real-time / repeated inference
     --------------------------------
     When only a subset of inputs change between calls (e.g. static terrain,
@@ -97,7 +107,10 @@ class GeoBayesianNetwork:
         Parameters
         ----------
         model:
-            A fitted ``pgmpy.models.DiscreteBayesianNetwork``.
+            A fitted ``pgmpy.models.DiscreteBayesianNetwork``, however it was
+            obtained: built in code, fitted with a pgmpy estimator, or read with
+            any pgmpy reader. Use :func:`load` to read a file by path instead.
+            Unlike :func:`load`, this does not run ``check_model()``.
         """
         if not isinstance(model, DiscreteBayesianNetwork):
             raise TypeError(
@@ -1035,23 +1048,198 @@ class GeoBayesianNetwork:
 # Module-level factory
 # ---------------------------------------------------------------------------
 
+# File extension → pgmpy reader name. ".xml" is resolved by _sniff_xml_format().
+_FORMAT_BY_SUFFIX = {
+    ".bif": "bif",
+    ".xmlbif": "xmlbif",
+    ".net": "net",
+    ".xdsl": "xdsl",
+    ".uai": "uai",
+}
+
+# XML root element → pgmpy reader name, for files that just say ".xml".
+_FORMAT_BY_XML_ROOT = {
+    "BIF": "xmlbif",
+    "ANALYSISNOTEBOOK": "xbn",
+    "SMILE": "xdsl",
+}
+
+# Reader name → human-readable format, used in messages and docs.
+_FORMAT_NAMES = {
+    "bif": "BIF",
+    "xmlbif": "XMLBIF",
+    "net": "Hugin NET",
+    "xdsl": "GeNIe XDSL",
+    "uai": "UAI",
+    "xbn": "XBN",
+}
+
+# Plain-text formats. pgmpy opens these with the platform default encoding, which
+# fails on e.g. a UTF-8 file read on Windows (cp1252), so geobn decodes them itself
+# and hands the reader a string. The XML formats are left to the XML parser, which
+# honours the file's own encoding declaration.
+_TEXT_FORMATS = frozenset({"bif", "net", "uai"})
+
+
+def _read_text(path: Path) -> str:
+    """Decode a plain-text BN file as UTF-8, falling back to the platform default."""
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return path.read_text()
+
+
+def _sniff_xml_format(path: Path) -> str:
+    """Return the pgmpy reader name for a ``.xml`` file, from its root element."""
+    import xml.etree.ElementTree as ET  # noqa: PLC0415
+
+    try:
+        for _event, elem in ET.iterparse(path, events=("start",)):
+            # Strip any "{namespace}" prefix.
+            tag = elem.tag.rsplit("}", 1)[-1].upper()
+            break
+        else:
+            raise ValueError(f"'{path.name}' contains no XML elements.")
+    except ET.ParseError as exc:
+        raise ValueError(f"'{path.name}' is not well-formed XML: {exc}") from exc
+
+    try:
+        return _FORMAT_BY_XML_ROOT[tag]
+    except KeyError:
+        known = ", ".join(f"<{t}>" for t in _FORMAT_BY_XML_ROOT)
+        raise ValueError(
+            f"Cannot tell which BN format '{path.name}' is: its root element is "
+            f"<{tag}>, not one of {known}. Rename the file to the extension of its "
+            f"actual format (.xmlbif, .xdsl) or convert it."
+        ) from None
+
+
+def _reader_class(fmt: str) -> type:
+    """Import and return the pgmpy reader class for a format name (lazily)."""
+    from pgmpy import readwrite  # noqa: PLC0415
+
+    return {
+        "bif": readwrite.BIFReader,
+        "xmlbif": readwrite.XMLBIFReader,
+        "net": readwrite.NETReader,
+        "xdsl": readwrite.XDSLReader,
+        "uai": readwrite.UAIReader,
+        "xbn": readwrite.XBNReader,
+    }[fmt]
+
 
 def load(path: str | Path) -> GeoBayesianNetwork:
-    """Load a Bayesian network from a BIF file.
+    """Load a Bayesian network from a file, dispatching on the extension.
+
+    Supported formats, all read with the readers that ship with pgmpy:
+
+    - ``.bif`` — BIF, written by bnlearn and most exporters
+    - ``.xmlbif`` — XMLBIF, written by Weka and JavaBayes
+    - ``.net`` — Hugin NET, written by Hugin and GeNIe
+    - ``.xdsl`` — GeNIe XDSL, written by GeNIe / SMILE
+    - ``.uai`` — UAI competition format
+    - ``.xml`` — resolved from the file's root element (see below)
+
+    A ``.xml`` file is resolved from its root element: ``<BIF>`` is read as
+    XMLBIF, ``<smile>`` as GeNIe XDSL and ``<ANALYSISNOTEBOOK>`` as Microsoft
+    XBN. Any other root element raises :class:`ValueError`.
+
+    UAI files store no names: nodes come back as ``var_0``, ``var_1``, … and
+    states as integers, in file order. Loading one emits a
+    :class:`UserWarning`, and :meth:`~GeoBayesianNetwork.set_input` and
+    :meth:`~GeoBayesianNetwork.set_discretization` must use those names.
+
+    Netica ``.dne`` is not supported, because pgmpy has no reader for it.
+    Export to ``.net`` or ``.bif`` from Netica instead. To use any other
+    format, read it yourself and pass the model to
+    :class:`GeoBayesianNetwork` directly.
 
     Parameters
     ----------
     path:
-        Path to a ``.bif`` file.
+        Path to a Bayesian network file with one of the extensions above.
 
     Returns
     -------
     GeoBayesianNetwork
         Ready to accept inputs via :meth:`~GeoBayesianNetwork.set_input`.
-    """
-    from pgmpy.readwrite import BIFReader  # noqa: PLC0415
 
-    reader = BIFReader(str(Path(path)))
-    model = reader.get_model()  # returns DiscreteBayesianNetwork in pgmpy >=1.0
-    _log.info("Loaded BN from '%s': %d nodes", Path(path).name, len(model.nodes()))
+    Raises
+    ------
+    FileNotFoundError
+        If ``path`` does not exist.
+    ValueError
+        If the extension is not recognised, a ``.xml`` file's root element is
+        not one of the three above, the file cannot be parsed, or the parsed
+        model is not a valid discrete Bayesian network.
+    """
+    path = Path(path)
+    if not path.is_file():
+        raise FileNotFoundError(f"No such Bayesian network file: '{path}'")
+
+    suffix = path.suffix.lower()
+    if suffix == ".xml":
+        fmt = _sniff_xml_format(path)
+    else:
+        try:
+            fmt = _FORMAT_BY_SUFFIX[suffix]
+        except KeyError:
+            supported = ", ".join([*_FORMAT_BY_SUFFIX, ".xml"])
+            raise ValueError(
+                f"Unsupported Bayesian network format '{suffix or path.name}'. "
+                f"Supported extensions: {supported}. Netica .dne is not supported "
+                f"(pgmpy has no reader); export to .net or .bif instead."
+            ) from None
+
+    reader_cls = _reader_class(fmt)
+    try:
+        if fmt in _TEXT_FORMATS:
+            reader = reader_cls(string=_read_text(path))
+        else:
+            reader = reader_cls(str(path))
+        model = reader.get_model()
+    except Exception as exc:
+        raise ValueError(
+            f"Could not read '{path.name}' as {_FORMAT_NAMES[fmt]}: {exc}"
+        ) from exc
+
+    if not isinstance(model, DiscreteBayesianNetwork):
+        raise ValueError(
+            f"'{path.name}' describes a {type(model).__name__}, but geobn needs a "
+            f"directed discrete Bayesian network. (UAI files may hold undirected "
+            f"Markov networks.)"
+        )
+
+    if fmt == "uai":
+        warnings.warn(
+            f"UAI files store no variable or state names, so '{path.name}' was "
+            f"loaded with positional names: nodes {_preview_nodes(model)} and "
+            f"integer states. Use these names in set_input() and "
+            f"set_discretization().",
+            UserWarning,
+            stacklevel=2,
+        )
+
+    try:
+        valid = model.check_model()
+    except Exception as exc:
+        raise ValueError(
+            f"'{path.name}' is not a valid Bayesian network: {exc}"
+        ) from exc
+    if not valid:
+        raise ValueError(f"'{path.name}' is not a valid Bayesian network.")
+
+    _log.info(
+        "Loaded %s BN from '%s': %d nodes",
+        _FORMAT_NAMES[fmt],
+        path.name,
+        len(model.nodes()),
+    )
     return GeoBayesianNetwork(model)
+
+
+def _preview_nodes(model: DiscreteBayesianNetwork, limit: int = 3) -> str:
+    """Short, deterministic sample of node names for an error/warning message."""
+    names = sorted(str(n) for n in model.nodes())
+    shown = ", ".join(names[:limit])
+    return f"{shown}, …" if len(names) > limit else shown

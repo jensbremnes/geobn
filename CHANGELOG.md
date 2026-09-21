@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `geobn.load()` now dispatches on the file extension and reads `.bif`, `.xmlbif`, `.net` (Hugin), `.xdsl` (GeNIe) and `.uai`, in addition to `.bif`. All readers already ship with pgmpy, so there is no new dependency. A bare `.xml` file is resolved from its root element: `<BIF>` → XMLBIF, `<smile>` → GeNIe XDSL, `<ANALYSISNOTEBOOK>` → Microsoft XBN; any other root element raises `ValueError`. UAI files store no variable or state names, so their nodes arrive as `var_0`, `var_1`, … and their states as integers — loading one emits a `UserWarning` saying so. Netica `.dne` is not supported (pgmpy has no reader); the error message says to export to `.net` or `.bif` instead.
+- Documented that `GeoBayesianNetwork(model)` accepts a pgmpy `DiscreteBayesianNetwork` directly, for models built in code, fitted with a pgmpy estimator, or read with a reader `load()` does not dispatch on.
 - Summary maps on `InferenceResult`: `expected_value(node, values)`, `std(node, values)`, `mode(node)`, `mode_probability(node)`, `exceedance(node, state)` (P ≥ state), `ignorance(node, threshold)` and `quantile(node, q)`. Each returns a `(H, W)` float32 array, NaN for NoData. `values` is a list in state order or a dict keyed by state name.
 - `to_geotiff(..., layers={name: array})` writes extra `(H, W)` layers as single-band `{name}.tif` files; `to_xarray(layers=...)` adds them as `(y, x)` variables.
 - `save_precomputed(path)` and `load_precomputed(path)` methods on `GeoBayesianNetwork` — serialize the precomputed lookup table to a portable `.npz` file for offline→runtime deployment.
@@ -17,7 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `WCSSource(axis_labels=(lon_label, lat_label))`: set the axis names used in WCS 2.0 `SUBSET` parameters, for servers that don't use the default `Long`/`Lat` (e.g. `lon`/`lat` or `x`/`y`).
 - `load_precomputed` restores the saved discretizations for inputs that have none set, so a runtime machine only needs to register the inputs.
 
+### Changed
+- `geobn.load()` now validates the parsed model with pgmpy's `check_model()` and raises `ValueError` naming the file. A malformed or truncated file, or a CPT whose columns do not sum to 1, now fails at load time instead of deep inside `infer()`. An unreadable file and an unknown extension also raise `ValueError`, and a missing file raises `FileNotFoundError`, instead of surfacing a raw pgmpy or parser error.
+
 ### Fixed
+- `geobn.load()` decodes `.bif`, `.net` and `.uai` files as UTF-8 (falling back to the platform default encoding), instead of letting pgmpy open them with the platform default. A UTF-8 model file with non-ASCII characters — including the bundled `examples/lyngen_alps/avalanche_risk.bif`, whose header comment draws the network with box-drawing characters — raised `UnicodeDecodeError` on Windows. XML-based formats were unaffected, as the XML parser honours the file's own encoding declaration.
 - Evidence with probability zero (e.g. an input observed in a state with prior 0) now gives NaN for every query node on every inference path (per-combination loop, joint table, `precompute()` and its fallback). Previously the per-combination loop could return probabilities for query nodes that pgmpy pruned away from the contradiction, and for children of a root observed in a zero-prior state. `infer()` and `query_batch()`/`query_point()` now also emit a `UserWarning` giving the number of affected pixels/points and the observed states with prior 0 (e.g. `Weather='storm'`).
 - `to_geotiff` now writes the band descriptions (state labels and `"entropy"`) that the docs already promised.
 - `WCSSource` disk cache: the cache key now includes `extra_subsets`, `format`, `valid_range` and `axis_labels`. Previously, e.g. two time steps of the same coverage (different `extra_subsets`) shared one cache entry, so the second returned the first one's data. Cache entries for requests that use none of these options stay valid.

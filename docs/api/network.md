@@ -1,7 +1,8 @@
 # GeoBayesianNetwork
 
-The primary user-facing class. Load a `.bif` file with `geobn.load()`, attach data
-sources to evidence nodes, configure discretization, and call `infer()`.
+The primary user-facing class. Load a model file with `geobn.load()` (`.bif`,
+`.xmlbif`, `.xml`, `.net`, `.xdsl`, `.uai`), attach data sources to evidence nodes,
+configure discretization, and call `infer()`.
 
 ## Factory function
 

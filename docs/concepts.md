@@ -18,12 +18,53 @@
 
 ## Loading a Bayesian network
 
-geobn reads `.bif` files (Bayesian Interchange Format), the standard format used by
-GeNIe/Netica/bnlearn. Use [`geobn.load()`][geobn.load]:
+[`geobn.load()`][geobn.load] picks a reader from the file extension:
+
+| Extension | Format | Typically written by |
+|---|---|---|
+| `.bif` | BIF (Bayesian Interchange Format) | bnlearn, most exporters |
+| `.xmlbif` | XMLBIF | Weka, JavaBayes |
+| `.net` | Hugin NET | Hugin, GeNIe |
+| `.xdsl` | GeNIe XDSL | GeNIe / SMILE |
+| `.uai` | UAI | UAI competition files |
+| `.xml` | sniffed from the root element | see below |
 
 ```python
 bn = geobn.load("my_model.bif")
+bn = geobn.load("my_model.xdsl")   # same call, GeNIe file
 ```
+
+All readers ship with pgmpy, so no extra dependency is needed. Files are decoded as
+UTF-8, falling back to the platform default encoding.
+
+A bare `.xml` file is resolved from its root element: `<BIF>` is read as XMLBIF,
+`<smile>` as GeNIe XDSL and `<ANALYSISNOTEBOOK>` as Microsoft XBN. Any other root
+element raises `ValueError`.
+
+`load()` also runs pgmpy's `check_model()`, so a truncated file or a CPT whose columns
+do not sum to 1 fails at load time rather than deep inside `infer()`.
+
+!!! warning "UAI files carry no names"
+    The UAI format stores no variable or state names, so nodes come back as `var_0`,
+    `var_1`, … and states as integers, in file order. `geobn.load()` emits a
+    `UserWarning` and `set_input()` / `set_discretization()` must use those names.
+
+!!! note "Netica `.dne`"
+    Not supported — pgmpy has no Netica reader. Export to `.net` or `.bif` from Netica.
+
+### Using a pgmpy model directly
+
+`GeoBayesianNetwork` accepts any pgmpy `DiscreteBayesianNetwork`, so a model built in
+code, fitted with a pgmpy estimator, or read with a reader `load()` does not dispatch on
+can be used without going through a file:
+
+```python
+from pgmpy.readwrite import XBNReader
+
+bn = geobn.GeoBayesianNetwork(XBNReader("model.dat").get_model())
+```
+
+Unlike `load()`, this does not run `check_model()`.
 
 ## Attaching data sources
 

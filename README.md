@@ -53,7 +53,7 @@ pip install -e ".[dev]"
 DataSources  →  align to grid  →  discretize  →  BN inference  →  InferenceResult
 ```
 
-1. **Load a BN** — `geobn.load("model.bif")` reads a standard `.bif` file via pgmpy.
+1. **Load a BN** — `geobn.load("model.bif")` dispatches on the file extension and reads `.bif`, `.xmlbif`, `.xml`, `.net` (Hugin), `.xdsl` (GeNIe) and `.uai` via pgmpy. A pgmpy model can also be wrapped directly with `geobn.GeoBayesianNetwork(model)`.
 2. **Attach sources** — each evidence node gets a `DataSource`. All sources are reprojected and resampled to a common grid at inference time (the georeferenced source with the finest resolution, compared in metres, sets the grid automatically, or call `bn.set_grid()` explicitly).
 3. **Discretize** — `set_discretization(node, breakpoints)` bins continuous values into the discrete states your BN expects.
 4. **Infer** — pixels are grouped by unique evidence combination, never queried individually. The strategy is chosen from the combinations **actually observed on the map** (usually far fewer than the theoretically possible ones): a handful of combinations means a few targeted pgmpy `VariableElimination` queries; many combinations means the full conditional table P(query | evidence) is computed with a *single* joint query and results are mapped to pixels by array indexing. See [How it works](https://jensbremnes.github.io/geobn/concepts/#inference-batching) for details.
@@ -72,6 +72,22 @@ import geobn
 
 bn = geobn.load("avalanche_risk.bif")
 bn.set_grid("EPSG:4326", resolution=0.005, extent=(19.8, 69.35, 21.0, 69.75))
+```
+
+`load()` picks the reader from the extension: `.bif`, `.xmlbif`, `.net` (Hugin),
+`.xdsl` (GeNIe) and `.uai`. A bare `.xml` file is resolved from its root element
+(`<BIF>`, `<smile>` or `<ANALYSISNOTEBOOK>`). UAI files store no names, so their nodes
+arrive as `var_0`, `var_1`, … and their states as integers; loading one warns about it.
+Netica `.dne` is not supported — pgmpy has no reader for it, so export to `.net` or
+`.bif` from Netica.
+
+Any pgmpy `DiscreteBayesianNetwork` can be used directly, which covers models built in
+code, fitted with a pgmpy estimator, or read with a reader `load()` does not dispatch on:
+
+```python
+from pgmpy.readwrite import XBNReader
+
+bn = geobn.GeoBayesianNetwork(XBNReader("model.dat").get_model())
 ```
 
 ### Connecting data sources
@@ -141,7 +157,7 @@ probs = result.probabilities["avalanche_risk"]  # (H, W, n_states) — one band 
 ent   = result.entropy("avalanche_risk")         # (H, W) — Shannon entropy in bits
 p_hi  = result.exceedance("avalanche_risk", "high")  # (H, W) — P(risk >= high)
 
-# State names come directly from the .bif file
+# State names come directly from the model file
 for i, state in enumerate(result.state_names["avalanche_risk"]):
     print(f"P({state}) mean: {probs[..., i].mean():.3f}")
 ```
