@@ -68,8 +68,9 @@ Unlike `load()`, this does not run `check_model()`.
 
 ## Attaching data sources
 
-Each root node (node with no parents) in the BN corresponds to an evidence variable.
-Attach a [`DataSource`][geobn.sources.DataSource] to each one:
+Any node in the BN can be an evidence variable. Usually these are the root nodes (no
+parents), but an intermediate or leaf node can be observed just as well. Attach a
+[`DataSource`][geobn.sources.DataSource] to each one:
 
 ```python
 bn.set_input("slope_angle", geobn.WCSSource(url="https://example.com/wcs", layer="dtm"))
@@ -82,6 +83,46 @@ Pixel sizes are compared in metres on the ground (measured at each grid's centre
 10 m UTM raster correctly beats a 0.001° WGS84 raster even though 0.001 < 10 in CRS units. All other sources are reprojected to this grid
 automatically. To override this behaviour, call `bn.set_grid(crs, resolution, extent)`
 explicitly before running inference.
+
+### Evidence on intermediate nodes
+
+Evidence is not limited to the nodes at the top of the network. A source attached to an
+intermediate or leaf node observes that node, and the evidence flows in both directions:
+down to its descendants and up to its parents. A dataset that measures an intermediate
+concept directly can therefore be used in place of the layers behind it.
+
+In the bundled Lyngen model, `terrain_factor` is an intermediate node with parents
+`slope_angle`, `sun_exposure` and `forest_cover`. Observing it and querying a parent
+gives a distribution over slope classes:
+
+```python
+bn = geobn.load("avalanche_risk.bif")
+bn.set_input("terrain_factor", geobn.RasterSource("terrain_class.tif"))
+bn.set_discretization("terrain_factor", [0, 1, 2, 3], ["low", "medium", "high"])
+result = bn.infer(query=["slope_angle"])        # P(slope | observed terrain)
+```
+
+`slope_angle` has a uniform prior in that model, so the observation shifts it
+substantially:
+
+| observed | flat | gentle | steep | extreme |
+|---|---|---|---|---|
+| *(prior)* | 0.250 | 0.250 | 0.250 | 0.250 |
+| `terrain_factor="low"` | 0.422 | 0.375 | 0.123 | 0.081 |
+| `terrain_factor="high"` | 0.006 | 0.039 | 0.372 | 0.583 |
+
+This is ordinary Bayesian inference read in the less common direction, and its accuracy
+depends entirely on the CPD being inverted. It is useful for filling gaps and for
+cross-checking one layer against another, and it yields a distribution over states
+rather than a measured value.
+
+Root inputs are marginally independent, so any combination of them is possible. Inputs
+on nodes with parents are not: observing a node together with its parent in a
+combination the CPD gives probability zero leaves the posterior undefined. Those pixels
+become NaN with a `UserWarning`, as with any other impossible evidence (see below).
+
+A node cannot be both an input and a query node. `infer()`, `precompute()` and
+`load_precomputed()` raise `ValueError` naming it, before any data is fetched.
 
 ## GridSpec and alignment
 

@@ -75,6 +75,24 @@ def impossible_root_model() -> DiscreteBayesianNetwork:
     return model
 
 
+@pytest.fixture
+def impossible_non_root_model(impossible_root_model) -> DiscreteBayesianNetwork:
+    """As ``impossible_root_model``, but P(C = c1 | a0, b0) = 0.
+
+    Observing the non-root node C together with A = a0, B = b0 is then
+    impossible, which a product of root priors cannot detect.
+    """
+    model = impossible_root_model.copy()
+    model.remove_cpds(model.get_cpds("C"))
+    model.add_cpds(TabularCPD(
+        "C", 2, [[1.0, 0.5, 0.3, 0.1], [0.0, 0.5, 0.7, 0.9]],
+        evidence=["A", "B"], evidence_card=[2, 2],
+        state_names={"C": ["c0", "c1"], "A": ["a0", "a1"], "B": ["b0", "b1"]},
+    ))
+    model.check_model()
+    return model
+
+
 def _impossible_grid_kwargs(model, query_nodes):
     """Two pixels: pixel (0, 0) observes A = a1 (impossible), pixel (0, 1) A = a0."""
     return dict(
@@ -207,15 +225,9 @@ class TestImpossibleEvidence:
             assert np.isnan(impossible[q]).all()
             assert not np.isnan(possible[q]).any()
 
-    def test_non_root_evidence_chain_rule(self, impossible_root_model):
+    def test_non_root_evidence_chain_rule(self, impossible_non_root_model):
         """Evidence C = c1 with A = a0, B = b0 is possible; with a zero CPT entry it is not."""
-        model = impossible_root_model.copy()
-        model.remove_cpds(model.get_cpds("C"))
-        model.add_cpds(TabularCPD(
-            "C", 2, [[1.0, 0.5, 0.3, 0.1], [0.0, 0.5, 0.7, 0.9]],
-            evidence=["A", "B"], evidence_card=[2, 2],
-            state_names={"C": ["c0", "c1"], "A": ["a0", "a1"], "B": ["b0", "b1"]},
-        ))
+        model = impossible_non_root_model
         ve = VariableElimination(model)
         priors = _root_priors(model)
 
@@ -264,3 +276,60 @@ class TestImpossibleEvidenceWarning:
         with pytest.warns(UserWarning, match=r"1 point\(s\).*A='a1'"):
             out = bn.query_batch({"A": ["a0", "a1"], "B": "b0", "D": "d1"})
         assert np.isnan(out["E"][1]).all() and not np.isnan(out["E"][0]).any()
+
+
+class TestNonRootEvidenceThroughPublicAPI:
+    """Roadmap 1.3: set_input() on a node with parents, end to end."""
+
+    @staticmethod
+    def _bn(model, grids: dict[str, list[list[float]]]) -> GeoBayesianNetwork:
+        bn = GeoBayesianNetwork(model)
+        transform = Affine(1.0, 0, 0.0, 0, -1.0, 1.0)
+        for node, values in grids.items():
+            arr = np.asarray(values, dtype=float)
+            bn.set_input(node, ArraySource(arr, crs="EPSG:32632", transform=transform))
+            bn.set_discretization(node, [-0.5, 0.5, 1.5])
+        return bn
+
+    def test_paths_agree(self, impossible_root_model, monkeypatch):
+        """The per-combo loop and the joint table agree when evidence is non-root."""
+        grids = {"A": [[0, 0, 1, 1]], "C": [[0, 1, 0, 1]]}
+        loop = self._bn(impossible_root_model, grids).infer(query=["B", "E"])
+
+        monkeypatch.setattr(inference_module, "_COMBO_LOOP_THRESHOLD", 0)
+        table = self._bn(impossible_root_model, grids).infer(query=["B", "E"])
+
+        for q in ["B", "E"]:
+            np.testing.assert_allclose(
+                loop.probabilities[q], table.probabilities[q], atol=1e-6, equal_nan=True
+            )
+
+    def test_precompute_agrees_with_pgmpy(self, impossible_root_model):
+        """The precomputed table reproduces a direct VE query with non-root evidence."""
+        bn = self._bn(impossible_root_model, {"A": [[0, 1]], "C": [[1, 0]]})
+        pgmpy_path = bn.infer(query=["B"]).probabilities["B"]
+        bn.precompute(query=["B"])
+        table_path = bn.infer(query=["B"]).probabilities["B"]
+        np.testing.assert_allclose(pgmpy_path, table_path, atol=1e-6, equal_nan=True)
+
+        ve = VariableElimination(impossible_root_model)
+        expected = ve.query(
+            ["B"], evidence={"A": "a0", "C": "c1"}, show_progress=False
+        ).values
+        np.testing.assert_allclose(table_path[0, 0], expected, atol=1e-6)
+
+    @pytest.mark.parametrize("use_table", [False, True])
+    def test_contradictory_parent_child_evidence_is_nan(
+        self, impossible_non_root_model, use_table
+    ):
+        """A = a0, B = b0, C = c1 has P(e) = 0, so every query node is NaN."""
+        bn = self._bn(
+            impossible_non_root_model,
+            {"A": [[0, 0]], "B": [[0, 1]], "C": [[1, 1]]},
+        )
+        if use_table:
+            bn.precompute(query=["E"])
+        with pytest.warns(UserWarning, match="contradict each other"):
+            probs = bn.infer(query=["E"]).probabilities["E"]
+        assert np.isnan(probs[0, 0]).all()        # a0, b0, c1 -> impossible
+        assert not np.isnan(probs[0, 1]).any()    # a0, b1, c1 -> fine

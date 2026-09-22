@@ -134,12 +134,76 @@ class TestEndToEnd:
         with pytest.raises(ValueError, match="No discretization"):
             bn.infer(query=["fire_risk"])
 
-    def test_set_input_non_root_raises(self, bn, slope_array, reference_transform):
-        with pytest.raises(ValueError, match="parents"):
-            bn.set_input(
-                "fire_risk",
-                geobn.ArraySource(slope_array, crs="EPSG:4326", transform=reference_transform),
-            )
+    def test_set_input_non_root_runs_backwards(self, bn, reference_transform):
+        """A source on a child node gives a posterior over its parent."""
+        from pgmpy.inference import VariableElimination
+
+        # fire_risk is a child of slope and rainfall; observe it and ask for slope.
+        observed = np.tile([0.0, 1.0, 2.0, 1.0, 0.0], (10, 2)).astype(np.float32)
+        bn.set_input(
+            "fire_risk",
+            geobn.ArraySource(observed, crs="EPSG:4326", transform=reference_transform),
+        )
+        bn.set_discretization("fire_risk", [-0.5, 0.5, 1.5, 2.5], ["low", "medium", "high"])
+
+        probs = bn.infer(query=["slope"]).probabilities["slope"]
+        assert probs.shape == (10, 10, 3)
+        assert not np.isnan(probs).any()
+        np.testing.assert_allclose(probs.sum(axis=-1), 1.0, atol=1e-5)
+
+        ve = VariableElimination(bn._model)
+        for value, state in [(0.0, "low"), (1.0, "medium"), (2.0, "high")]:
+            expected = ve.query(
+                ["slope"], evidence={"fire_risk": state}, show_progress=False
+            ).values
+            row, col = np.argwhere(observed == value)[0]
+            np.testing.assert_allclose(probs[row, col], expected, atol=1e-6)
+
+        # The posterior must actually differ from the prior, or the test proves nothing.
+        prior = ve.query(["slope"], show_progress=False).values
+        assert not np.allclose(probs[0, 0], prior, atol=1e-3)
+
+    def test_mixed_root_and_non_root_evidence(self, bn, slope_array, reference_transform):
+        """A root input and a child input together match a direct pgmpy query."""
+        from pgmpy.inference import VariableElimination
+
+        observed = np.full((10, 10), 2.0, dtype=np.float32)  # fire_risk = high everywhere
+        bn.set_input(
+            "slope",
+            geobn.ArraySource(slope_array, crs="EPSG:4326", transform=reference_transform),
+        )
+        bn.set_input(
+            "fire_risk",
+            geobn.ArraySource(observed, crs="EPSG:4326", transform=reference_transform),
+        )
+        bn.set_discretization("slope", [0, 10, 30, 90], ["flat", "moderate", "steep"])
+        bn.set_discretization("fire_risk", [-0.5, 0.5, 1.5, 2.5], ["low", "medium", "high"])
+
+        probs = bn.infer(query=["rainfall"]).probabilities["rainfall"]
+        ve = VariableElimination(bn._model)
+        expected = ve.query(
+            ["rainfall"],
+            evidence={"slope": "flat", "fire_risk": "high"},
+            show_progress=False,
+        ).values
+        np.testing.assert_allclose(probs[0, 0], expected, atol=1e-6)
+
+    def test_query_node_that_is_also_input_raises(self, bn, slope_array, reference_transform):
+        """The guard fires before any data is fetched."""
+        bn.set_input(
+            "slope",
+            geobn.ArraySource(slope_array, crs="EPSG:4326", transform=reference_transform),
+        )
+        bn.set_discretization("slope", [0, 10, 30, 90], ["flat", "moderate", "steep"])
+        # A source that would blow up on fetch: if the guard ran late, we would see
+        # a file error from here instead of the ValueError below.
+        bn.set_input("rainfall", geobn.RasterSource("does_not_exist.tif"))
+        bn.set_discretization("rainfall", [0, 25, 75, 200], ["low", "medium", "high"])
+
+        with pytest.raises(ValueError, match="both an input and a query node"):
+            bn.infer(query=["slope"])
+        with pytest.raises(ValueError, match="both an input and a query node"):
+            bn.precompute(query=["slope"])
 
     def test_wrong_labels_raises(self, bn):
         with pytest.raises(ValueError, match="match"):

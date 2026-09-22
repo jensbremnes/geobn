@@ -103,7 +103,10 @@ def build_conditional_table(
     yield NaN rows.
     """
     if any(q in evidence_nodes for q in query_nodes):
-        return None  # joint over duplicated variables is ill-defined; caller falls back
+        # The joint over a duplicated variable is ill-defined.  GeoBayesianNetwork
+        # rejects this before it gets here; direct callers of this function fall
+        # back to the per-combination loop, where pgmpy raises.
+        return None
 
     n_states_evidence = [
         len(model.get_cpds(n).state_names[n]) for n in evidence_nodes
