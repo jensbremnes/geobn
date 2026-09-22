@@ -42,10 +42,10 @@ nodes each — this is valid in pgmpy and requires no special handling.
 |------|--------|---------|
 | `water_depth` | `WCSSource` (EMODnet Bathymetry) | ~115 m global coverage; cached locally |
 | `vessel_traffic` | `RasterSource` (AIS density GeoTIFF) | enc/km²/day; falls back to `ConstantSource(2.0)` |
-| `wave_height` | `PointGridSource` (Met.no Oceanforecast) | `sea_surface_wave_height`, 5×5 grid |
-| `current_speed` | `PointGridSource` (Met.no Oceanforecast) | `sea_water_speed`, 5×5 grid |
-| `wind_speed` | `PointGridSource` (Met.no Locationforecast) | `wind_speed`, 5×5 grid |
-| `fog_fraction` | `PointGridSource` (Met.no Locationforecast) | `fog_area_fraction`, 5×5 grid |
+| `wave_height` | `PointGridSource` (Met.no Oceanforecast) | `sea_surface_wave_height`, 5×5 grid; cached |
+| `current_speed` | `PointGridSource` (Met.no Oceanforecast) | `sea_water_speed`, 5×5 grid; cached |
+| `wind_speed` | `PointGridSource` (Met.no Locationforecast) | `wind_speed`, 5×5 grid; cached |
+| `fog_fraction` | `PointGridSource` (Met.no Locationforecast) | `fog_area_fraction`, 5×5 grid; cached |
 
 ## Annotated walkthrough
 
@@ -90,12 +90,22 @@ def _make_ocean_fn(variable_name):
         return float(data["properties"]["timeseries"][0]["data"]["instant"]["details"][variable_name])
     return _fn
 
-bn.set_input("wave_height", geobn.PointGridSource(fn=_make_ocean_fn("sea_surface_wave_height"), sample_points=5))
-bn.set_input("current_speed", geobn.PointGridSource(fn=_make_ocean_fn("sea_water_speed"), sample_points=5))
+for node, variable in [("wave_height", "sea_surface_wave_height"),
+                       ("current_speed", "sea_water_speed")]:
+    bn.set_input(node, geobn.PointGridSource(
+        fn=_make_ocean_fn(variable),
+        sample_points=5,
+        name=node,
+        cache_dir=CACHE_DIR,
+    ))
 ```
 
 Each `PointGridSource` makes 25 API calls (5×5 grid), then `align_to_grid()` bilinearly
-resamples the coarse result to the full 150×200 pixel grid.
+resamples the coarse result to the full 150×200 pixel grid. The lattice is sampled once and
+then kept, because this example is about the output rather than the weather being current;
+pass `cache_ttl=timedelta(hours=6)` to re-sample after a given age. `name` is what the cache
+entry is keyed on, since the four closures built by these factories are otherwise
+indistinguishable.
 
 ### 4. Wire all inputs and set discretization
 
@@ -163,5 +173,7 @@ density in encounters/km²/day on the same 150×200 grid.
 uv run python examples/karmsundet/run_example.py
 ```
 
-The bathymetry is cached on first run. The Met.no forecasts are fetched live on
-every run (~100 API calls total, taking roughly 5–10 seconds).
+The first run fetches the bathymetry and makes ~100 Met.no calls (roughly 5–10 seconds).
+Everything is cached and kept, so later runs make no requests at all. Delete
+`examples/karmsundet/cache/` to fetch current forecasts, or pass `cache_ttl` to the
+`PointGridSource`s to have them re-sample on their own.

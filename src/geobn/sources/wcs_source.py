@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from pathlib import Path
 
 import requests
@@ -38,6 +39,11 @@ class WCSSource(DataSource):
         Optional path to a directory for caching fetched rasters on disk.
         On a cache hit the HTTP request is skipped entirely.  Useful for
         static sources (terrain, bathymetry) where the data never changes.
+    cache_ttl:
+        Maximum age of a cache entry, as a :class:`~datetime.timedelta` or a
+        number of seconds.  An older entry is refetched.  The default
+        ``None`` never expires, which suits terrain and bathymetry; set it
+        for coverages that are updated.
     extra_subsets:
         Additional ``SUBSET=`` values appended to the WCS 2.0 request (e.g.
         ``['time("2023-01-01T00:00:00.000Z")']`` for time-aware coverages).
@@ -72,8 +78,11 @@ class WCSSource(DataSource):
         extra_subsets: list[str] | None = None,
         valid_range: tuple[float | None, float | None] | None = None,
         axis_labels: tuple[str, str] = ("Long", "Lat"),
+        cache_ttl: timedelta | float | None = None,
     ) -> None:
-        super().__init__(valid_range=valid_range)
+        super().__init__(
+            valid_range=valid_range, cache_dir=cache_dir, cache_ttl=cache_ttl
+        )
         if (
             isinstance(axis_labels, str)
             or len(axis_labels) != 2
@@ -88,7 +97,6 @@ class WCSSource(DataSource):
         self._version = version
         self._format = format
         self._timeout = timeout
-        self._cache_dir = Path(cache_dir).expanduser() if cache_dir is not None else None
         self._extra_subsets = extra_subsets or []
         self._axis_labels = tuple(axis_labels)
 
@@ -106,15 +114,6 @@ class WCSSource(DataSource):
 
         lon_min, lat_min, lon_max, lat_max = grid.extent_wgs84()
         H, W = grid.shape
-
-        # ── Cache check ───────────────────────────────────────────────────
-        if self._cache_dir is not None:
-            from ._cache import _load_cached, _make_cache_path, _save_cached  # noqa: PLC0415
-            cache_key = self._cache_key(lon_min, lat_min, lon_max, lat_max, H, W)
-            cache_path = _make_cache_path(self._cache_dir, cache_key)
-            cached = _load_cached(cache_path)
-            if cached is not None:
-                return cached
 
         if self._version.startswith("2"):
             params = self._build_params_v2(lon_min, lat_min, lon_max, lat_max)
@@ -137,27 +136,17 @@ class WCSSource(DataSource):
 
         with MemoryFile(response.content) as memfile:
             with memfile.open() as src:
-                result = read_first_band(src)
-
-        # ── Save to cache ─────────────────────────────────────────────────
-        if self._cache_dir is not None:
-            _save_cached(cache_path, result)
-
-        return result
+                return read_first_band(src)
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _cache_key(
-        self,
-        lon_min: float,
-        lat_min: float,
-        lon_max: float,
-        lat_max: float,
-        H: int,
-        W: int,
-    ) -> dict:
+    def _cache_key(self, grid: GridSpec | None = None) -> dict | None:
+        if grid is None:
+            return None
+        lon_min, lat_min, lon_max, lat_max = grid.extent_wgs84()
+        H, W = grid.shape
         key = {
             "url": self._url, "layer": self._layer, "version": self._version,
             "lon_min": round(lon_min, 8), "lat_min": round(lat_min, 8),

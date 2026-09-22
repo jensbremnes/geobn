@@ -55,6 +55,10 @@ import numpy as np
 
 import geobn
 
+# This script prints arrows and box-drawing rules, which the default console
+# encoding on Windows (cp1252) cannot represent.
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 # ---------------------------------------------------------------------------
 # Study area — Lyngen Alps, Tromsø county, northern Norway
 # ---------------------------------------------------------------------------

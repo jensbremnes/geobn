@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from pathlib import Path
 
 import requests
@@ -30,6 +31,10 @@ class URLSource(DataSource):
     cache_dir:
         Optional path to a directory for caching the fetched raster on disk.
         On a cache hit the HTTP request is skipped entirely.
+    cache_ttl:
+        Maximum age of a cache entry, as a :class:`~datetime.timedelta` or a
+        number of seconds.  An older entry is refetched.  The default
+        ``None`` never expires.
     valid_range:
         Optional ``(lo, hi)`` tuple.  Values outside this range become NaN.
         Use it for files that encode missing data as an extreme number
@@ -44,22 +49,18 @@ class URLSource(DataSource):
         timeout: int = 60,
         cache_dir: str | Path | None = None,
         valid_range: tuple[float | None, float | None] | None = None,
+        cache_ttl: timedelta | float | None = None,
     ) -> None:
-        super().__init__(valid_range=valid_range)
+        super().__init__(
+            valid_range=valid_range, cache_dir=cache_dir, cache_ttl=cache_ttl
+        )
         self._url = url
         self._timeout = timeout
-        self._cache_dir = Path(cache_dir).expanduser() if cache_dir is not None else None
+
+    def _cache_key(self, grid: GridSpec | None = None) -> dict | None:
+        return {"url": self._url}
 
     def _fetch(self, grid: GridSpec | None = None) -> RasterData:
-        # ── Cache check ───────────────────────────────────────────────────
-        if self._cache_dir is not None:
-            from ._cache import _load_cached, _make_cache_path, _save_cached  # noqa: PLC0415
-            cache_key = {"url": self._url}
-            cache_path = _make_cache_path(self._cache_dir, cache_key)
-            cached = _load_cached(cache_path)
-            if cached is not None:
-                return cached
-
         _log.info("Fetching %s", self._url)
         response = requests.get(self._url, timeout=self._timeout)
         response.raise_for_status()
@@ -67,10 +68,4 @@ class URLSource(DataSource):
 
         with MemoryFile(response.content) as memfile:
             with memfile.open() as src:
-                result = read_first_band(src)
-
-        # ── Save to cache ─────────────────────────────────────────────────
-        if self._cache_dir is not None:
-            _save_cached(cache_path, result)
-
-        return result
+                return read_first_band(src)

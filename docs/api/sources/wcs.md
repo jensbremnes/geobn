@@ -51,6 +51,22 @@ change, so outdated entries are refetched). Corrupt or missing cache entries tri
 fresh request. `valid_range` is not part of the key: the response is cached as it
 arrived and the range is applied on the way out, so adjusting it costs no new request.
 
+`cache_ttl` sets how long an entry stays usable, as a `timedelta` or a number of seconds.
+It is not part of the key either — freshness is a property of the entry, not of what was
+requested — so changing it never orphans a cached coverage. Leave it unset for terrain and
+bathymetry, which do not change:
+
+```python
+source = geobn.WCSSource(
+    url="https://example.com/wcs",
+    layer="sea_surface_temperature",
+    cache_ttl=timedelta(hours=3),
+)
+```
+
+If the coverage has expired and the request then fails, the expired entry is returned with
+a `UserWarning` naming its age.
+
 ### Recipes
 
 **Kartverket Norwegian DTM (10 m):**

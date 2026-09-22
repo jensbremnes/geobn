@@ -52,6 +52,10 @@ from pathlib import Path
 
 import numpy as np
 
+# This script prints arrows and box-drawing rules, which the default console
+# encoding on Windows (cp1252) cannot represent.
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 # ---------------------------------------------------------------------------
 # Grid constants — must match run_example.py exactly
 # ---------------------------------------------------------------------------

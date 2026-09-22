@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import logging
 import time
+from datetime import timedelta
+from pathlib import Path
 from typing import Callable
 
 import numpy as np
@@ -44,6 +46,20 @@ class PointGridSource(DataSource):
         Optional ``(lo, hi)`` tuple.  Either bound may be ``None``.  A sample
         outside the range becomes NaN, for APIs that report missing data as a
         magic number rather than null.
+    name:
+        Short identifier for this source, e.g. ``"wave_height"``.  It is what
+        the disk cache is keyed on, together with the bounding box and
+        ``sample_points``, because a callable cannot identify itself — two
+        sources built from the same factory are indistinguishable otherwise.
+        Required when ``cache_dir`` is set.
+    cache_dir:
+        Optional path to a directory for caching the sampled lattice on disk.
+        On a cache hit no calls to ``fn`` are made at all.
+    cache_ttl:
+        Maximum age of a cache entry, as a :class:`~datetime.timedelta` or a
+        number of seconds.  An older entry is resampled.  Forecasts are the
+        usual case for this, e.g. ``cache_ttl=timedelta(hours=6)``.  The
+        default ``None`` never expires.
     """
 
     requires_grid = True
@@ -54,11 +70,34 @@ class PointGridSource(DataSource):
         sample_points: int = 5,
         delay: float = 0.05,
         valid_range: tuple[float | None, float | None] | None = None,
+        name: str | None = None,
+        cache_dir: str | Path | None = None,
+        cache_ttl: timedelta | float | None = None,
     ) -> None:
-        super().__init__(valid_range=valid_range)
+        super().__init__(
+            valid_range=valid_range, cache_dir=cache_dir, cache_ttl=cache_ttl
+        )
+        if cache_dir is not None and not name:
+            raise ValueError(
+                "PointGridSource needs a name to cache on disk, e.g. "
+                "name='wave_height'.  A callable cannot identify itself, so "
+                "without one two sources would share a cache entry."
+            )
         self._fn = fn
         self._sample_points = max(1, sample_points)
         self._delay = delay
+        self._name = name
+
+    def _cache_key(self, grid: GridSpec | None = None) -> dict | None:
+        if grid is None:
+            return None
+        lon_min, lat_min, lon_max, lat_max = grid.extent_wgs84()
+        return {
+            "name": self._name,
+            "n": self._sample_points,
+            "lon_min": round(lon_min, 8), "lat_min": round(lat_min, 8),
+            "lon_max": round(lon_max, 8), "lat_max": round(lat_max, 8),
+        }
 
     def _fetch(self, grid: GridSpec | None = None) -> RasterData:
         if grid is None:

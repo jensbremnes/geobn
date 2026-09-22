@@ -85,6 +85,9 @@ source = geobn.URLSource(
 bn.set_input("slope_angle", source)
 ```
 
+Add `cache_ttl` (a `timedelta` or seconds) for a file that is updated; an entry older than
+the TTL is downloaded again.
+
 ---
 
 ## PointGridSource
@@ -95,6 +98,26 @@ bn.set_input("slope_angle", source)
 
 `PointGridSource` is the generic primitive for any point-queryable data source.
 Pass any callable that accepts `(lat, lon)` and returns a float.
+
+**Caching a forecast:** pass `cache_dir` together with `name`, and `cache_ttl` for how long
+a sampled lattice stays usable. On a hit `fn` is not called at all, which matters when each
+call is an HTTP request — a 5×5 lattice is 25 of them.
+
+`name` is what identifies the entry, because a callable cannot identify itself: two sources
+built by the same factory are indistinguishable, so they would otherwise share one entry.
+Passing `cache_dir` without `name` raises `ValueError`.
+
+```python
+from datetime import timedelta
+
+source = geobn.PointGridSource(
+    fn=sea_temperature,
+    sample_points=5,
+    name="sea_temp",
+    cache_dir="cache/",
+    cache_ttl=timedelta(hours=6),
+)
+```
 
 **Example — Open-Meteo precipitation:**
 
