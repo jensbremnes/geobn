@@ -18,6 +18,7 @@ configure discretization, and call `infer()`.
         - set_input
         - fetch_raw
         - set_discretization
+        - suggest_breakpoints
         - set_grid
         - freeze
         - precompute
