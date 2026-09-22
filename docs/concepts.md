@@ -68,8 +68,8 @@ Unlike `load()`, this does not run `check_model()`.
 
 ## Attaching data sources
 
-Any node in the BN can be an evidence variable — usually the root nodes (no parents),
-but an intermediate or leaf node can be observed too. Attach a
+Any node in the BN can be an evidence variable. Usually these are the root nodes (no
+parents), but an intermediate or leaf node can be observed just as well. Attach a
 [`DataSource`][geobn.sources.DataSource] to each one:
 
 ```python
@@ -84,16 +84,16 @@ Pixel sizes are compared in metres on the ground (measured at each grid's centre
 automatically. To override this behaviour, call `bn.set_grid(crs, resolution, extent)`
 explicitly before running inference.
 
-### Evidence on non-root nodes
+### Evidence on intermediate nodes
 
-Inputs are not restricted to root nodes. Attaching a source to an intermediate or leaf
-node observes that node, and the evidence flows **both** ways through the network: down
-to its descendants, and up to its parents. A dataset that measures an intermediate
-concept directly can therefore stand in for the layers behind it.
+Evidence is not limited to the nodes at the top of the network. A source attached to an
+intermediate or leaf node observes that node, and the evidence flows in both directions:
+down to its descendants and up to its parents. A dataset that measures an intermediate
+concept directly can therefore be used in place of the layers behind it.
 
 In the bundled Lyngen model, `terrain_factor` is an intermediate node with parents
 `slope_angle`, `sun_exposure` and `forest_cover`. Observing it and querying a parent
-turns a terrain class back into a slope distribution:
+gives a distribution over slope classes:
 
 ```python
 bn = geobn.load("avalanche_risk.bif")
@@ -102,8 +102,8 @@ bn.set_discretization("terrain_factor", [0, 1, 2, 3], ["low", "medium", "high"])
 result = bn.infer(query=["slope_angle"])        # P(slope | observed terrain)
 ```
 
-`slope_angle`'s prior in that model is uniform (0.25 per state), so the evidence moves
-it a long way:
+`slope_angle` has a uniform prior in that model, so the observation shifts it
+substantially:
 
 | observed | flat | gentle | steep | extreme |
 |---|---|---|---|---|
@@ -111,21 +111,18 @@ it a long way:
 | `terrain_factor="low"` | 0.422 | 0.375 | 0.123 | 0.081 |
 | `terrain_factor="high"` | 0.006 | 0.039 | 0.372 | 0.583 |
 
-Three things are worth keeping in mind:
-
-- You get a **distribution, not a value** — "probably steep", not "34°".
-- The answer is only as good as the CPD it inverts. Reading a hand-authored table
-  backwards gives a hand-authored answer.
-- It inverts the model's assumptions rather than measuring the ground, so it fills gaps
-  and cross-checks layers; it does not replace a survey.
+This is ordinary Bayesian inference read in the less common direction, and its accuracy
+depends entirely on the CPD being inverted. It is useful for filling gaps and for
+cross-checking one layer against another, and it yields a distribution over states
+rather than a measured value.
 
 Root inputs are marginally independent, so any combination of them is possible. Inputs
-on non-root nodes are not: observing a node *and* its parent in a combination the CPD
-gives probability zero leaves the posterior undefined. Those pixels become NaN with a
-`UserWarning`, exactly like any other impossible evidence (see below).
+on nodes with parents are not: observing a node together with its parent in a
+combination the CPD gives probability zero leaves the posterior undefined. Those pixels
+become NaN with a `UserWarning`, as with any other impossible evidence (see below).
 
-One restriction remains — a node cannot be both an input and a query node. `infer()` and
-`precompute()` raise `ValueError` naming it, before any data is fetched.
+A node cannot be both an input and a query node. `infer()`, `precompute()` and
+`load_precomputed()` raise `ValueError` naming it, before any data is fetched.
 
 ## GridSpec and alignment
 

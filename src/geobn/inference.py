@@ -104,8 +104,8 @@ def build_conditional_table(
     """
     if any(q in evidence_nodes for q in query_nodes):
         # The joint over a duplicated variable is ill-defined.  GeoBayesianNetwork
-        # rejects this upfront; direct callers of this function fall back to the
-        # per-combination loop, where pgmpy raises.
+        # rejects this before it gets here; direct callers of this function fall
+        # back to the per-combination loop, where pgmpy raises.
         return None
 
     n_states_evidence = [

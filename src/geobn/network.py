@@ -86,10 +86,9 @@ class GeoBayesianNetwork:
 
     Evidence on any node
     --------------------
-    Inputs are not restricted to root nodes.  Attach a source to an
-    intermediate node when a dataset measures it directly, and query whichever
-    node you actually want — including one of that node's parents, which runs
-    the network backwards::
+    Any node can take a source, not only the root nodes.  Attach one to an
+    intermediate node when a dataset measures it directly, and query any other
+    node, including one of that node's parents::
 
         bn.set_input("terrain_factor", geobn.RasterSource("exposure.tif"))
         bn.set_discretization("terrain_factor", [0, 1, 2, 3], ["low", "medium", "high"])
@@ -155,9 +154,9 @@ class GeoBayesianNetwork:
         node:
             Name of any node in the BN.  Nodes with parents are allowed: attach
             a source to an intermediate node when a dataset measures it
-            directly, instead of deriving it from the nodes that feed it.
-            Evidence on a child also lets :meth:`infer` run *backwards* and
-            return a posterior over one of its parents.
+            directly, rather than deriving it from the nodes that feed it.
+            Evidence on a child also lets :meth:`infer` return a posterior over
+            one of its parents.
         source:
             Any :class:`~geobn.sources.DataSource` subclass.
 
@@ -166,11 +165,11 @@ class GeoBayesianNetwork:
         A node cannot be both an input and a query node; :meth:`infer` and
         :meth:`precompute` raise :class:`ValueError` if one is.
 
-        Inputs on non-root nodes are no longer independent of each other, so
-        they can contradict the model — observing a node and its parent in a
-        combination the CPD gives probability zero leaves the posterior
-        undefined.  Those pixels get NaN and a :class:`UserWarning`, as with
-        any other impossible evidence.
+        Inputs on nodes with parents are not independent of each other, so they
+        can contradict the model.  Observing a node together with its parent in
+        a combination the CPD gives probability zero leaves the posterior
+        undefined; those pixels get NaN and a :class:`UserWarning`, as with any
+        other impossible evidence.
         """
         self._validate_node_exists(node)
         self._inputs[node] = source
@@ -843,9 +842,8 @@ class GeoBayesianNetwork:
         ----------
         query:
             List of BN node names whose posterior distributions are requested.
-            Any node will do — including a parent of an observed node, which
-            runs the network backwards.  A node that is also an input raises
-            :class:`ValueError`.
+            These may be any nodes, including a parent of an observed node.  A
+            node that is also an input raises :class:`ValueError`.
 
         Returns
         -------
@@ -1067,8 +1065,8 @@ class GeoBayesianNetwork:
         if overlap:
             raise ValueError(
                 f"Node(s) {overlap} are both an input and a query node.  "
-                f"A node that is observed has no posterior to compute — drop it "
-                f"from the query, or remove its set_input() call."
+                f"An observed node has no posterior to compute.  Drop it from "
+                f"the query, or remove its set_input() call."
             )
 
     def _validate_labels_match_bn(self, node: str, labels: list[str]) -> None:
