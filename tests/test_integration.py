@@ -378,3 +378,83 @@ class TestFetchRawAndArraySource:
         probs = bn.infer(query=["fire_risk"]).probabilities["fire_risk"]
         assert np.all(np.isnan(probs[2, 7]))
         assert int(np.isnan(probs[..., 0]).sum()) == 1
+
+
+class TestSuggestBreakpoints:
+    def setup_method(self):
+        self.grid = ("EPSG:4326", 0.1, (0.0, 49.0, 1.0, 50.0))
+
+    def test_n_defaults_to_the_bn_state_count(self, bn, slope_array):
+        bn.set_grid(*self.grid)
+        bn.set_input("slope", geobn.ArraySource(slope_array))
+        # "slope" has three states in the fixture BN
+        assert len(bn.suggest_breakpoints("slope")) == 4
+
+    def test_result_round_trips_into_set_discretization(self, bn, slope_array):
+        bn.set_grid(*self.grid)
+        bn.set_input("slope", geobn.ArraySource(slope_array))
+        bn.set_discretization("slope", bn.suggest_breakpoints("slope"))
+        spec = bn._discretizations["slope"]
+        assert spec.labels == ["flat", "moderate", "steep"]
+
+    def test_quantile_fills_every_state(self, bn, rainfall_array):
+        bn.set_grid(*self.grid)
+        bn.set_input("rainfall", geobn.ArraySource(rainfall_array))
+        bn.set_discretization("rainfall", bn.suggest_breakpoints("rainfall"))
+        bn.set_input("slope", geobn.ConstantSource(5.0))
+        bn.set_discretization("slope", [0, 10, 30, 90], ["flat", "moderate", "steep"])
+
+        result = bn.infer(query=["fire_risk"])
+        assert result.probabilities["fire_risk"].shape == (10, 10, 3)
+
+    def test_equal_interval_method(self, bn, slope_array):
+        bn.set_grid(*self.grid)
+        bn.set_input("slope", geobn.ArraySource(slope_array))
+        bp = bn.suggest_breakpoints("slope", method="equal_interval")
+        widths = np.diff(bp)
+        np.testing.assert_allclose(widths, widths[0])
+
+    def test_explicit_n_overrides_the_state_count(self, bn, slope_array):
+        bn.set_grid(*self.grid)
+        bn.set_input("slope", geobn.ArraySource(slope_array))
+        assert len(bn.suggest_breakpoints("slope", n=5)) == 6
+
+    def test_bounds_are_passed_through(self, bn, slope_array):
+        bn.set_grid(*self.grid)
+        bn.set_input("slope", geobn.ArraySource(slope_array))
+        bp = bn.suggest_breakpoints("slope", bounds=(0.0, 90.0))
+        assert bp[0] == 0.0
+        assert bp[-1] == 90.0
+
+    def test_requires_a_grid(self, bn, slope_array):
+        bn.set_input("slope", geobn.ArraySource(slope_array))
+        with pytest.raises(RuntimeError, match="set_grid"):
+            bn.suggest_breakpoints("slope")
+
+    def test_unregistered_node_raises(self, bn):
+        bn.set_grid(*self.grid)
+        with pytest.raises(ValueError, match="set_input"):
+            bn.suggest_breakpoints("slope")
+
+    def test_unknown_node_raises(self, bn):
+        bn.set_grid(*self.grid)
+        with pytest.raises(ValueError, match="does not exist"):
+            bn.suggest_breakpoints("humidity")
+
+    def test_unknown_method_raises(self, bn, slope_array):
+        bn.set_grid(*self.grid)
+        bn.set_input("slope", geobn.ArraySource(slope_array))
+        with pytest.raises(ValueError, match="Unknown method"):
+            bn.suggest_breakpoints("slope", method="jenks")
+
+    def test_method_is_checked_before_any_fetch(self, bn):
+        """An unknown method fails without touching the source."""
+        bn.set_grid(*self.grid)
+
+        class Exploding(geobn.ConstantSource):
+            def _fetch(self, grid=None):
+                raise AssertionError("source must not be fetched")
+
+        bn.set_input("slope", Exploding(1.0))
+        with pytest.raises(ValueError, match="Unknown method"):
+            bn.suggest_breakpoints("slope", method="nope")

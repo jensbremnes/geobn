@@ -151,6 +151,19 @@ bn.set_discretization("recent_snow",  [0, 10, 25, 150])            # cm
 bn.set_discretization("temperature",  [-40, -8, -2, 15])           # °C
 ```
 
+When the thresholds are not fixed by the model, `suggest_breakpoints()` derives them
+from the data the node's source returns — `"quantile"` for bins holding equal numbers of
+pixels, `"equal_interval"` for bins of equal width. The bin count comes from the node's
+states in the BN.
+
+```python
+bn.set_discretization("slope_angle", bn.suggest_breakpoints("slope_angle"))
+bn.set_discretization("wind_load",   bn.suggest_breakpoints("wind_load", bounds=(0, 50)))
+```
+
+The same schemes are available for any array as `geobn.breakpoints.quantile(arr, n)` and
+`geobn.breakpoints.equal_interval(arr, n)`.
+
 ### Running inference
 
 ```python

@@ -12,6 +12,7 @@ from typing import Any
 import numpy as np
 from pgmpy.models import DiscreteBayesianNetwork
 
+from .breakpoints import equal_interval, quantile
 from .discretize import DiscretizationSpec, discretize_array
 from .grid import GridSpec, _pixel_size_m, align_to_grid
 from .inference import (
@@ -28,6 +29,12 @@ _log = logging.getLogger(__name__)
 
 # Bump when the __metadata__ layout written by save_precomputed changes.
 _TABLE_FORMAT_VERSION = 2
+
+# Scheme name → function, for suggest_breakpoints(method=...).
+_BREAKPOINT_METHODS = {
+    "quantile": quantile,
+    "equal_interval": equal_interval,
+}
 
 
 def _geobn_version() -> str:
@@ -224,6 +231,85 @@ class GeoBayesianNetwork:
         if self._frozen_cache.pop(node, None) is not None:
             self._invalidate_table()
         _log.info("Discretization: '%s' → %d bins %s", node, len(labels), labels)
+
+    def suggest_breakpoints(
+        self,
+        node: str,
+        method: str = "quantile",
+        n: int | None = None,
+        bounds: tuple[float | None, float | None] | None = None,
+    ) -> list[float]:
+        """Compute breakpoints for *node* from the values its source returns.
+
+        Fetches the source registered for *node* on the configured grid and
+        classifies its values, returning a list ready for
+        :meth:`set_discretization`::
+
+            bn.set_input("slope_angle", geobn.RasterSource("slope.tif"))
+            bn.set_discretization("slope_angle", bn.suggest_breakpoints("slope_angle"))
+
+        The breakpoints describe the data that was fetched.  They fit the case
+        where the model's conditional probabilities are authored alongside the
+        breakpoints; a CPT elicited against fixed thresholds ("steep means over
+        30°") needs those thresholds, not ones derived from one raster.
+
+        Parameters
+        ----------
+        node:
+            Node with a source registered via :meth:`set_input`.
+        method:
+            ``"quantile"`` (default) for bins holding roughly equal numbers of
+            pixels, or ``"equal_interval"`` for bins of equal width.  See
+            :mod:`geobn.breakpoints`.
+        n:
+            Number of bins.  Defaults to the number of states *node* has in the
+            BN, which is what :meth:`set_discretization` expects.
+        bounds:
+            ``(lo, hi)`` for the outer breakpoints, which define the valid
+            range.  Either side may be ``None`` to take that side from the
+            data, and the default ``None`` takes both.  Pass the node's
+            physical range when later data may go beyond the values at hand.
+
+        Returns
+        -------
+        list of float
+            ``n + 1`` strictly increasing breakpoints.
+
+        Raises
+        ------
+        RuntimeError
+            If no grid is configured, since the source cannot be fetched
+            without one.
+        ValueError
+            If *node* has no registered input, *method* is unknown, or the
+            data cannot be split into *n* bins.
+        """
+        self._validate_node_exists(node)
+        if method not in _BREAKPOINT_METHODS:
+            raise ValueError(
+                f"Unknown method '{method}'.  Available: "
+                f"{', '.join(sorted(_BREAKPOINT_METHODS))}."
+            )
+        source = self._inputs.get(node)
+        if source is None:
+            raise ValueError(
+                f"No input registered for '{node}', so there is no data to "
+                f"classify.  Call bn.set_input('{node}', source) first, or pass "
+                f"an array to geobn.breakpoints.{method}() directly."
+            )
+        if self._grid is None:
+            raise RuntimeError(
+                f"No grid configured, so the source for '{node}' cannot be "
+                "fetched.  Call bn.set_grid(crs, resolution, extent) first, or "
+                f"pass an array to geobn.breakpoints.{method}() directly."
+            )
+
+        if n is None:
+            n = len(self._bn_state_names(node))
+        values = self.fetch_raw(source)
+        result = _BREAKPOINT_METHODS[method](values, n, bounds=bounds)
+        _log.info("Breakpoints for '%s' (%s, %d bins): %s", node, method, n, result)
+        return result
 
     def set_grid(
         self,

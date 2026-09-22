@@ -165,6 +165,39 @@ bn.set_discretization(
 This is useful when out-of-range values mean bad data (sensor errors, fill values)
 rather than extreme conditions.
 
+### Breakpoints from the data
+
+`geobn.breakpoints` computes a breakpoint list from an array, for the two standard
+classification schemes:
+
+```python
+arr = bn.fetch_raw(geobn.RasterSource("slope.tif"))
+
+geobn.breakpoints.quantile(arr, 3)        # bins with equal pixel counts
+geobn.breakpoints.equal_interval(arr, 3)  # bins of equal width
+```
+
+`bn.suggest_breakpoints(node)` does the same for a node that already has a source,
+taking the bin count from the node's states in the BN:
+
+```python
+bn.set_input("slope_angle", geobn.RasterSource("slope.tif"))
+bn.set_discretization("slope_angle", bn.suggest_breakpoints("slope_angle"))
+```
+
+The outer breakpoints are the data's minimum and maximum, which makes them the valid
+range as well. Pass `bounds=` to pin a node's physical range instead, so later data
+beyond the values at hand is still in range:
+
+```python
+bn.suggest_breakpoints("slope_angle", bounds=(0, 90))
+```
+
+Breakpoints computed this way describe the data they were computed from. They fit the
+case where a model's conditional probabilities are authored alongside its breakpoints;
+a CPT elicited against fixed thresholds — "steep means over 30°" — needs those
+thresholds.
+
 ## NaN / NoData propagation
 
 NaN values propagate strictly: if **any** input pixel is NaN, that pixel is excluded
