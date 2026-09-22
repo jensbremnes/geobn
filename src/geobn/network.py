@@ -84,6 +84,17 @@ class GeoBayesianNetwork:
         model = XBNReader("model.dat").get_model()
         bn = geobn.GeoBayesianNetwork(model)
 
+    Evidence on any node
+    --------------------
+    Inputs are not restricted to root nodes.  Attach a source to an
+    intermediate node when a dataset measures it directly, and query whichever
+    node you actually want — including one of that node's parents, which runs
+    the network backwards::
+
+        bn.set_input("terrain_factor", geobn.RasterSource("exposure.tif"))
+        bn.set_discretization("terrain_factor", [0, 1, 2, 3], ["low", "medium", "high"])
+        result = bn.infer(query=["slope_angle"])    # P(slope | observed terrain)
+
     Real-time / repeated inference
     --------------------------------
     When only a subset of inputs change between calls (e.g. static terrain,
@@ -142,12 +153,26 @@ class GeoBayesianNetwork:
         Parameters
         ----------
         node:
-            Name of a root node (no parents) in the BN.
+            Name of any node in the BN.  Nodes with parents are allowed: attach
+            a source to an intermediate node when a dataset measures it
+            directly, instead of deriving it from the nodes that feed it.
+            Evidence on a child also lets :meth:`infer` run *backwards* and
+            return a posterior over one of its parents.
         source:
             Any :class:`~geobn.sources.DataSource` subclass.
+
+        Notes
+        -----
+        A node cannot be both an input and a query node; :meth:`infer` and
+        :meth:`precompute` raise :class:`ValueError` if one is.
+
+        Inputs on non-root nodes are no longer independent of each other, so
+        they can contradict the model — observing a node and its parent in a
+        combination the CPD gives probability zero leaves the posterior
+        undefined.  Those pixels get NaN and a :class:`UserWarning`, as with
+        any other impossible evidence.
         """
         self._validate_node_exists(node)
-        self._validate_is_root(node)
         self._inputs[node] = source
         # If this node was frozen and cached, the cached array is now stale
         if self._frozen_cache.pop(node, None) is not None:
@@ -329,6 +354,7 @@ class GeoBayesianNetwork:
         """
         for node in query:
             self._validate_node_exists(node)
+        self._validate_query_not_evidence(query)
 
         from pgmpy.inference import VariableElimination  # noqa: PLC0415
 
@@ -519,9 +545,11 @@ class GeoBayesianNetwork:
                 "Register the same inputs or re-run precompute()."
             )
 
-        # Validate every query node exists in the BN
+        # Validate every query node exists in the BN and is not also an input.
+        # precompute() guards this, but a hand-made or legacy file may not.
         for n in query_nodes:
             self._validate_node_exists(n)
+        self._validate_query_not_evidence(query_nodes)
 
         if not legacy:
             for n, saved in metadata["state_names"].items():
@@ -815,7 +843,9 @@ class GeoBayesianNetwork:
         ----------
         query:
             List of BN node names whose posterior distributions are requested.
-            These nodes do not need to be root nodes.
+            Any node will do — including a parent of an observed node, which
+            runs the network backwards.  A node that is also an input raises
+            :class:`ValueError`.
 
         Returns
         -------
@@ -836,6 +866,7 @@ class GeoBayesianNetwork:
 
         for node in query:
             self._validate_node_exists(node)
+        self._validate_query_not_evidence(query)
 
         # ── 1. Determine the reference grid ───────────────────────────
         if self._grid is not None:
@@ -1025,12 +1056,19 @@ class GeoBayesianNetwork:
                 f"Available nodes: {sorted(self._model.nodes())}"
             )
 
-    def _validate_is_root(self, node: str) -> None:
-        parents = list(self._model.predecessors(node))
-        if parents:
+    def _validate_query_not_evidence(self, query: list[str]) -> None:
+        """Reject query nodes that are also inputs.
+
+        P(node | node = state) is degenerate, and pgmpy rejects a variable that
+        appears in both ``variables`` and ``evidence``.  Checked up front so it
+        fails before any data is fetched, rather than mid-inference.
+        """
+        overlap = [n for n in dict.fromkeys(query) if n in self._inputs]
+        if overlap:
             raise ValueError(
-                f"Node '{node}' has parents {parents} and is not a root node.  "
-                f"Only root nodes (no parents) can be used as inputs."
+                f"Node(s) {overlap} are both an input and a query node.  "
+                f"A node that is observed has no posterior to compute — drop it "
+                f"from the query, or remove its set_input() call."
             )
 
     def _validate_labels_match_bn(self, node: str, labels: list[str]) -> None:
