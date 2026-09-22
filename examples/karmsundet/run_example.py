@@ -56,14 +56,13 @@ import json
 import ssl
 import sys
 import urllib.request
-from datetime import timedelta
 from pathlib import Path
 
 import numpy as np
 
 import geobn
 
-# This script prints arrows, box-drawing rules and ≤, which the default console
+# This script prints arrows and box-drawing rules, which the default console
 # encoding on Windows (cp1252) cannot represent.
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -89,10 +88,6 @@ try:
     _SSL_CTX: ssl.SSLContext = ssl.create_default_context(cafile=_certifi.where())
 except ImportError:
     _SSL_CTX = ssl.create_default_context()
-
-
-#: Forecasts are re-sampled once a cached lattice is older than this.
-WEATHER_CACHE_TTL = timedelta(hours=6)
 
 
 # ---------------------------------------------------------------------------
@@ -240,9 +235,11 @@ def main() -> None:
     _centre_lon = (WEST  + EAST)  / 2
     _probe_apis(_centre_lat, _centre_lon)
 
-    hours = WEATHER_CACHE_TTL.total_seconds() / 3600
-    print(f"\nFetching Met.no live forecasts (cached ≤{hours:.0f} h) ...")
+    print("\nFetching Met.no forecasts (cached after the first run) ...")
 
+    # The forecasts are sampled once and then kept: this example is about the
+    # output, not about the weather being current.  Pass cache_ttl to re-sample
+    # after a given age, e.g. cache_ttl=timedelta(hours=6).
     forecasts = [
         ("wave_height",   "Oceanforecast: sea_surface_wave_height",
          _make_ocean_fn("sea_surface_wave_height")),
@@ -261,7 +258,6 @@ def main() -> None:
             delay=0.05,
             name=node,
             cache_dir=CACHE_DIR,
-            cache_ttl=WEATHER_CACHE_TTL,
         ))
 
     # ── 4. Discretizations ────────────────────────────────────────────────

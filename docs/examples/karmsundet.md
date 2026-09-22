@@ -42,10 +42,10 @@ nodes each — this is valid in pgmpy and requires no special handling.
 |------|--------|---------|
 | `water_depth` | `WCSSource` (EMODnet Bathymetry) | ~115 m global coverage; cached locally |
 | `vessel_traffic` | `RasterSource` (AIS density GeoTIFF) | enc/km²/day; falls back to `ConstantSource(2.0)` |
-| `wave_height` | `PointGridSource` (Met.no Oceanforecast) | `sea_surface_wave_height`, 5×5 grid; cached 6 h |
-| `current_speed` | `PointGridSource` (Met.no Oceanforecast) | `sea_water_speed`, 5×5 grid; cached 6 h |
-| `wind_speed` | `PointGridSource` (Met.no Locationforecast) | `wind_speed`, 5×5 grid; cached 6 h |
-| `fog_fraction` | `PointGridSource` (Met.no Locationforecast) | `fog_area_fraction`, 5×5 grid; cached 6 h |
+| `wave_height` | `PointGridSource` (Met.no Oceanforecast) | `sea_surface_wave_height`, 5×5 grid; cached |
+| `current_speed` | `PointGridSource` (Met.no Oceanforecast) | `sea_water_speed`, 5×5 grid; cached |
+| `wind_speed` | `PointGridSource` (Met.no Locationforecast) | `wind_speed`, 5×5 grid; cached |
+| `fog_fraction` | `PointGridSource` (Met.no Locationforecast) | `fog_area_fraction`, 5×5 grid; cached |
 
 ## Annotated walkthrough
 
@@ -97,15 +97,15 @@ for node, variable in [("wave_height", "sea_surface_wave_height"),
         sample_points=5,
         name=node,
         cache_dir=CACHE_DIR,
-        cache_ttl=timedelta(hours=6),
     ))
 ```
 
 Each `PointGridSource` makes 25 API calls (5×5 grid), then `align_to_grid()` bilinearly
-resamples the coarse result to the full 150×200 pixel grid. `cache_ttl` keeps a sampled
-lattice for six hours, so only the first run of an afternoon pays for the calls. `name` is
-what the cache entry is keyed on, since the four closures built by these factories are
-otherwise indistinguishable.
+resamples the coarse result to the full 150×200 pixel grid. The lattice is sampled once and
+then kept, because this example is about the output rather than the weather being current;
+pass `cache_ttl=timedelta(hours=6)` to re-sample after a given age. `name` is what the cache
+entry is keyed on, since the four closures built by these factories are otherwise
+indistinguishable.
 
 ### 4. Wire all inputs and set discretization
 
@@ -173,6 +173,7 @@ density in encounters/km²/day on the same 150×200 grid.
 uv run python examples/karmsundet/run_example.py
 ```
 
-The bathymetry is cached on first run and kept indefinitely. The Met.no forecasts are
-cached for six hours, so the first run of a session makes ~100 API calls (roughly 5–10
-seconds) and runs within that window make none.
+The first run fetches the bathymetry and makes ~100 Met.no calls (roughly 5–10 seconds).
+Everything is cached and kept, so later runs make no requests at all. Delete
+`examples/karmsundet/cache/` to fetch current forecasts, or pass `cache_ttl` to the
+`PointGridSource`s to have them re-sample on their own.
