@@ -4,7 +4,6 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-import numpy as np
 import requests
 from rasterio.io import MemoryFile
 
@@ -51,11 +50,13 @@ class WCSSource(DataSource):
         bounds are always given in EPSG:4326 (``SUBSETTINGCRS``).  Ignored
         for WCS 1.x requests.
     valid_range:
-        Optional ``(lo, hi)`` tuple. After fetching, pixels outside this
-        range are set to NaN.  Use this to mask out nodata sentinels that
-        the server encodes as extreme numeric values (e.g. ``(-500, 9000)``
-        for Norwegian DTM data where values below −500 m or above 9000 m
-        are fill values).
+        Optional ``(lo, hi)`` tuple.  Pixels outside this range are set to
+        NaN.  Use this to mask out nodata sentinels that the server encodes
+        as extreme numeric values (e.g. ``(-500, 9000)`` for Norwegian DTM
+        data where values below −500 m or above 9000 m are fill values).
+        Either bound may be ``None``.  The cached array is the one the
+        server sent, so changing the range re-masks it without requesting
+        the coverage again.
     """
 
     requires_grid = True
@@ -69,9 +70,10 @@ class WCSSource(DataSource):
         timeout: int = 60,
         cache_dir: str | Path | None = None,
         extra_subsets: list[str] | None = None,
-        valid_range: tuple[float, float] | None = None,
+        valid_range: tuple[float | None, float | None] | None = None,
         axis_labels: tuple[str, str] = ("Long", "Lat"),
     ) -> None:
+        super().__init__(valid_range=valid_range)
         if (
             isinstance(axis_labels, str)
             or len(axis_labels) != 2
@@ -88,14 +90,13 @@ class WCSSource(DataSource):
         self._timeout = timeout
         self._cache_dir = Path(cache_dir).expanduser() if cache_dir is not None else None
         self._extra_subsets = extra_subsets or []
-        self._valid_range = valid_range
         self._axis_labels = tuple(axis_labels)
 
     # ------------------------------------------------------------------
     # DataSource interface
     # ------------------------------------------------------------------
 
-    def fetch(self, grid: GridSpec | None = None) -> RasterData:
+    def _fetch(self, grid: GridSpec | None = None) -> RasterData:
         if grid is None:
             raise ValueError(
                 "WCSSource requires a grid context to determine the spatial "
@@ -138,13 +139,6 @@ class WCSSource(DataSource):
             with memfile.open() as src:
                 result = read_first_band(src)
 
-        # Servers that do not declare nodata may still encode it as extreme
-        # sentinel values — valid_range masks those.
-        if self._valid_range is not None:
-            lo, hi = self._valid_range
-            array = result.array
-            array[(array < lo) | (array > hi)] = np.nan
-
         # ── Save to cache ─────────────────────────────────────────────────
         if self._cache_dir is not None:
             _save_cached(cache_path, result)
@@ -178,8 +172,6 @@ class WCSSource(DataSource):
             key["axis_labels"] = list(self._axis_labels)
         if self._extra_subsets:
             key["extra_subsets"] = list(self._extra_subsets)
-        if self._valid_range is not None:
-            key["valid_range"] = [float(v) for v in self._valid_range]
         return key
 
     def _build_params_v2(

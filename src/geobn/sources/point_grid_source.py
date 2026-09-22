@@ -40,6 +40,10 @@ class PointGridSource(DataSource):
     delay:
         Seconds to sleep between successive calls.  Default 0.05 s — enough to
         be polite to most free REST APIs without slowing batch runs noticeably.
+    valid_range:
+        Optional ``(lo, hi)`` tuple.  Either bound may be ``None``.  A sample
+        outside the range becomes NaN, for APIs that report missing data as a
+        magic number rather than null.
     """
 
     requires_grid = True
@@ -49,12 +53,14 @@ class PointGridSource(DataSource):
         fn: Callable[[float, float], float | None],
         sample_points: int = 5,
         delay: float = 0.05,
+        valid_range: tuple[float | None, float | None] | None = None,
     ) -> None:
+        super().__init__(valid_range=valid_range)
         self._fn = fn
         self._sample_points = max(1, sample_points)
         self._delay = delay
 
-    def fetch(self, grid: GridSpec | None = None) -> RasterData:
+    def _fetch(self, grid: GridSpec | None = None) -> RasterData:
         if grid is None:
             raise ValueError(
                 "PointGridSource requires a grid context to determine the spatial "

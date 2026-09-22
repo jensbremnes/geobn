@@ -58,6 +58,13 @@ source = geobn.RasterSource("dem_10m.tif")
 bn.set_input("elevation", source)
 ```
 
+**Example — masking undeclared sentinel values:**
+
+```python
+# A DTM that writes -9999 for sea without declaring it as nodata
+source = geobn.RasterSource("dem_10m.tif", valid_range=(-500.0, 9000.0))
+```
+
 ---
 
 ## URLSource

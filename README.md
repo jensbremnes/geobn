@@ -42,8 +42,12 @@ pip install -e ".[dev]"
 | `ConstantSource(value)` | Broadcast a scalar over the entire grid |
 | `RasterSource(path)` | Local GeoTIFF / any rasterio-readable file |
 | `URLSource(url, timeout, cache_dir)` | Remote Cloud-Optimised GeoTIFF |
-| `WCSSource(url, layer, valid_range=...)` | Generic OGC WCS endpoint (terrain, bathymetry, …) |
+| `WCSSource(url, layer, version)` | Generic OGC WCS endpoint (terrain, bathymetry, …) |
 | `PointGridSource(fn, sample_points, delay)` | Sample any `fn(lat, lon) -> float` over the bounding box with user-defined resolution |
+
+Every source also takes `valid_range=(lo, hi)`, which replaces values outside the range
+with NaN. Use it for data that encodes missing values as an extreme number, such as −9999,
+without declaring it as nodata. Either bound may be `None` to leave that side unbounded.
 
 ---
 
