@@ -45,6 +45,9 @@ pip install -e ".[dev]"
 | `WCSSource(url, layer, version)` | Generic OGC WCS endpoint (terrain, bathymetry, …) |
 | `PointGridSource(fn, sample_points, delay)` | Sample any `fn(lat, lon) -> float` over the bounding box with user-defined resolution |
 
+`URLSource`, `WCSSource` and `PointGridSource` also take `cache_dir` and `cache_ttl` to cache
+fetched data on disk and expire it after a given age.
+
 Every source also takes `valid_range=(lo, hi)`, which replaces values outside the range
 with NaN. Use it for data that encodes missing values as an extreme number, such as −9999,
 without declaring it as nodata. Either bound may be `None` to leave that side unbounded.
@@ -176,7 +179,7 @@ result.show_map("out/")     # interactive Leaflet map
 
 ### Caching remote data to disk
 
-`URLSource` and `WCSSource` accept a `cache_dir` argument. When set, fetched data is written to disk as `.npy` files and reused on subsequent runs — **including across Python sessions and script restarts**. No network request is made if a matching cache file already exists.
+`URLSource`, `WCSSource` and `PointGridSource` accept a `cache_dir` argument. When set, fetched data is written to disk as `.npy` files and reused on subsequent runs — **including across Python sessions and script restarts**. No network request is made if a matching cache file already exists.
 
 The cache key is a SHA-256 hash of the URL and request parameters (bounding box, resolution, layer), so changing the grid or source automatically triggers a fresh fetch.
 
@@ -193,6 +196,21 @@ snow = geobn.URLSource("https://example.com/recent_snow.tif", cache_dir="cache/"
 ```
 
 This is particularly useful when iterating on discretization rules or BN structure — fetch the terrain data once, then experiment freely without waiting for remote requests on every run.
+
+Add `cache_ttl` for data that changes. An entry older than the TTL is fetched again; without one, a cached entry is used forever, which is what terrain and bathymetry want.
+
+```python
+from datetime import timedelta
+
+waves = geobn.PointGridSource(
+    fn=sea_state,
+    name="wave_height",           # identifies the entry; a callable cannot
+    cache_dir="cache/",
+    cache_ttl=timedelta(hours=6),
+)
+```
+
+If the data is stale and the fetch then fails, the expired entry is returned with a `UserWarning` giving its age, so a run offline still produces a map instead of an error.
 
 ### Repeated inference with changing inputs
 

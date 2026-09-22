@@ -42,10 +42,10 @@ nodes each — this is valid in pgmpy and requires no special handling.
 |------|--------|---------|
 | `water_depth` | `WCSSource` (EMODnet Bathymetry) | ~115 m global coverage; cached locally |
 | `vessel_traffic` | `RasterSource` (AIS density GeoTIFF) | enc/km²/day; falls back to `ConstantSource(2.0)` |
-| `wave_height` | `PointGridSource` (Met.no Oceanforecast) | `sea_surface_wave_height`, 5×5 grid |
-| `current_speed` | `PointGridSource` (Met.no Oceanforecast) | `sea_water_speed`, 5×5 grid |
-| `wind_speed` | `PointGridSource` (Met.no Locationforecast) | `wind_speed`, 5×5 grid |
-| `fog_fraction` | `PointGridSource` (Met.no Locationforecast) | `fog_area_fraction`, 5×5 grid |
+| `wave_height` | `PointGridSource` (Met.no Oceanforecast) | `sea_surface_wave_height`, 5×5 grid; cached 6 h |
+| `current_speed` | `PointGridSource` (Met.no Oceanforecast) | `sea_water_speed`, 5×5 grid; cached 6 h |
+| `wind_speed` | `PointGridSource` (Met.no Locationforecast) | `wind_speed`, 5×5 grid; cached 6 h |
+| `fog_fraction` | `PointGridSource` (Met.no Locationforecast) | `fog_area_fraction`, 5×5 grid; cached 6 h |
 
 ## Annotated walkthrough
 
@@ -90,12 +90,22 @@ def _make_ocean_fn(variable_name):
         return float(data["properties"]["timeseries"][0]["data"]["instant"]["details"][variable_name])
     return _fn
 
-bn.set_input("wave_height", geobn.PointGridSource(fn=_make_ocean_fn("sea_surface_wave_height"), sample_points=5))
-bn.set_input("current_speed", geobn.PointGridSource(fn=_make_ocean_fn("sea_water_speed"), sample_points=5))
+for node, variable in [("wave_height", "sea_surface_wave_height"),
+                       ("current_speed", "sea_water_speed")]:
+    bn.set_input(node, geobn.PointGridSource(
+        fn=_make_ocean_fn(variable),
+        sample_points=5,
+        name=node,
+        cache_dir=CACHE_DIR,
+        cache_ttl=timedelta(hours=6),
+    ))
 ```
 
 Each `PointGridSource` makes 25 API calls (5×5 grid), then `align_to_grid()` bilinearly
-resamples the coarse result to the full 150×200 pixel grid.
+resamples the coarse result to the full 150×200 pixel grid. `cache_ttl` keeps a sampled
+lattice for six hours, so only the first run of an afternoon pays for the calls. `name` is
+what the cache entry is keyed on, since the four closures built by these factories are
+otherwise indistinguishable.
 
 ### 4. Wire all inputs and set discretization
 
@@ -163,5 +173,6 @@ density in encounters/km²/day on the same 150×200 grid.
 uv run python examples/karmsundet/run_example.py
 ```
 
-The bathymetry is cached on first run. The Met.no forecasts are fetched live on
-every run (~100 API calls total, taking roughly 5–10 seconds).
+The bathymetry is cached on first run and kept indefinitely. The Met.no forecasts are
+cached for six hours, so the first run of a session makes ~100 API calls (roughly 5–10
+seconds) and runs within that window make none.

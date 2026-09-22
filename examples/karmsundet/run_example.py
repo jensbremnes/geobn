@@ -55,13 +55,17 @@ from __future__ import annotations
 import json
 import ssl
 import sys
-import time
 import urllib.request
+from datetime import timedelta
 from pathlib import Path
 
 import numpy as np
 
 import geobn
+
+# This script prints arrows, box-drawing rules and ≤, which the default console
+# encoding on Windows (cp1252) cannot represent.
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 # ---------------------------------------------------------------------------
 # Study area — Karmsundet strait, Haugesund, western Norway
@@ -87,60 +91,8 @@ except ImportError:
     _SSL_CTX = ssl.create_default_context()
 
 
-# ---------------------------------------------------------------------------
-# Weather cache helpers
-# ---------------------------------------------------------------------------
-
-#: Default maximum age (hours) before a cached weather fetch is considered stale.
-WEATHER_CACHE_MAX_AGE_H = 6.0
-
-
-def _fetch_cached(
-    bn,
-    source,
-    name: str,
-    cache_dir: Path,
-    max_age_h: float = WEATHER_CACHE_MAX_AGE_H,
-) -> np.ndarray:
-    """Fetch *source* via ``bn.fetch_raw()``, caching the result to disk.
-
-    The cache is keyed by *name*.  A JSON sidecar stores the fetch timestamp
-    so stale entries (older than *max_age_h*) are re-fetched automatically.
-
-    Parameters
-    ----------
-    bn:
-        Configured ``GeoBayesianNetwork`` (grid must already be set).
-    source:
-        Any ``DataSource``, typically a ``PointGridSource``.
-    name:
-        Cache key; also used as the filename stem (e.g. ``"wave_height"``).
-    cache_dir:
-        Directory where ``.npy`` and ``.json`` cache files are stored.
-    max_age_h:
-        Maximum cache age in hours before the source is re-fetched.
-    """
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    npy_path  = cache_dir / f"{name}.npy"
-    meta_path = cache_dir / f"{name}.json"
-
-    if npy_path.exists() and meta_path.exists():
-        try:
-            meta = json.loads(meta_path.read_text())
-            age_h = (time.time() - meta["fetched_at"]) / 3600.0
-            if age_h < max_age_h:
-                arr = np.load(npy_path, allow_pickle=False)
-                print(f"    (cache hit, {age_h:.1f} h old)")
-                return arr
-            else:
-                print(f"    (cache stale, {age_h:.1f} h > {max_age_h} h — re-fetching)")
-        except Exception:
-            pass   # corrupt cache — fall through to re-fetch
-
-    arr = bn.fetch_raw(source)
-    np.save(npy_path, arr)
-    meta_path.write_text(json.dumps({"fetched_at": time.time(), "source": name}))
-    return arr
+#: Forecasts are re-sampled once a cached lattice is older than this.
+WEATHER_CACHE_TTL = timedelta(hours=6)
 
 
 # ---------------------------------------------------------------------------
@@ -288,43 +240,29 @@ def main() -> None:
     _centre_lon = (WEST  + EAST)  / 2
     _probe_apis(_centre_lat, _centre_lon)
 
-    print(f"\nFetching Met.no live forecasts (cached ≤{WEATHER_CACHE_MAX_AGE_H:.0f} h) ...")
+    hours = WEATHER_CACHE_TTL.total_seconds() / 3600
+    print(f"\nFetching Met.no live forecasts (cached ≤{hours:.0f} h) ...")
 
-    print("  wave_height    (Oceanforecast: sea_surface_wave_height) ...")
-    wave_arr = _fetch_cached(
-        bn,
-        geobn.PointGridSource(fn=_make_ocean_fn("sea_surface_wave_height"), sample_points=5, delay=0.05),
-        name="wave_height",
-        cache_dir=CACHE_DIR,
-    )
-    bn.set_input("wave_height", geobn.ArraySource(wave_arr))
-
-    print("  current_speed  (Oceanforecast: sea_water_speed) ...")
-    current_arr = _fetch_cached(
-        bn,
-        geobn.PointGridSource(fn=_make_ocean_fn("sea_water_speed"), sample_points=5, delay=0.05),
-        name="current_speed",
-        cache_dir=CACHE_DIR,
-    )
-    bn.set_input("current_speed", geobn.ArraySource(current_arr))
-
-    print("  wind_speed     (Locationforecast: wind_speed) ...")
-    wind_arr = _fetch_cached(
-        bn,
-        geobn.PointGridSource(fn=_make_loc_fn("wind_speed"), sample_points=5, delay=0.05),
-        name="wind_speed",
-        cache_dir=CACHE_DIR,
-    )
-    bn.set_input("wind_speed", geobn.ArraySource(wind_arr))
-
-    print("  fog_fraction   (Locationforecast: fog_area_fraction) ...")
-    fog_arr = _fetch_cached(
-        bn,
-        geobn.PointGridSource(fn=_make_loc_fn("fog_area_fraction", variant="complete"), sample_points=5, delay=0.05),
-        name="fog_fraction",
-        cache_dir=CACHE_DIR,
-    )
-    bn.set_input("fog_fraction", geobn.ArraySource(fog_arr))
+    forecasts = [
+        ("wave_height",   "Oceanforecast: sea_surface_wave_height",
+         _make_ocean_fn("sea_surface_wave_height")),
+        ("current_speed", "Oceanforecast: sea_water_speed",
+         _make_ocean_fn("sea_water_speed")),
+        ("wind_speed",    "Locationforecast: wind_speed",
+         _make_loc_fn("wind_speed")),
+        ("fog_fraction",  "Locationforecast: fog_area_fraction",
+         _make_loc_fn("fog_area_fraction", variant="complete")),
+    ]
+    for node, description, fn in forecasts:
+        print(f"  {node:<14} ({description}) ...")
+        bn.set_input(node, geobn.PointGridSource(
+            fn=fn,
+            sample_points=5,
+            delay=0.05,
+            name=node,
+            cache_dir=CACHE_DIR,
+            cache_ttl=WEATHER_CACHE_TTL,
+        ))
 
     # ── 4. Discretizations ────────────────────────────────────────────────
     # Compute AIS percentile thresholds from the depth array as a proxy for

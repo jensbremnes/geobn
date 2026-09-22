@@ -10,8 +10,10 @@ def _fetch(self, grid: GridSpec | None = None) -> RasterData:
 `RasterData` is a named tuple `(array: np.ndarray, crs: str | None, transform: Affine | None)`.
 No rasterio objects are ever exposed outside a source module.
 
-Callers use `fetch()`, which the base class provides. It calls `_fetch()` and applies
-`valid_range`.
+Callers use `fetch()`, which the base class provides. It reads and writes the disk cache,
+calls `_fetch()` and applies `valid_range`. A source becomes cacheable by also implementing
+`_cache_key(grid)`, which returns a JSON-serialisable dict identifying the request, or
+`None` when the source is not cached.
 
 ## Source catalogue
 
@@ -55,6 +57,23 @@ that declares nothing and encodes missing values as an extreme number, such as �
 
 For the cached sources the range is applied to the array on its way out, so the cache holds
 the data as it arrived and changing the range does not trigger a new request.
+
+## Caching and freshness
+
+`URLSource`, `WCSSource` and `PointGridSource` take `cache_dir` to store what they fetched
+on disk, and `cache_ttl` — a `timedelta` or a number of seconds — for how long an entry
+stays usable. Without a TTL an entry is used forever, which is what terrain and bathymetry
+want; with one, an older entry is fetched again.
+
+Each entry is an `.npy` array beside a `.json` sidecar holding its CRS, transform and the
+time it was fetched. `cache_ttl` is not part of the cache key, so changing it re-reads the
+same entry rather than orphaning it.
+
+If an entry has expired and the fetch then fails, the expired entry is returned with a
+`UserWarning` naming its age, so an offline run still produces a map.
+
+`PointGridSource` additionally needs `name`, since the callable it wraps cannot identify
+itself.
 
 ## DataSource ABC
 

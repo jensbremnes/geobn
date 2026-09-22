@@ -58,7 +58,15 @@
 
 ## Disk cache utilities (`sources/_cache.py`)
 
+Each entry is a `{hash16}.npy` array beside a `{hash16}.json` sidecar holding `crs`,
+`transform` and `fetched_at` (unix seconds). Entries written without `fetched_at` are dated
+by the array file's modification time.
+
 ::: geobn.sources._cache._make_cache_path
+    options:
+      show_root_heading: true
+
+::: geobn.sources._cache._cache_age
     options:
       show_root_heading: true
 
