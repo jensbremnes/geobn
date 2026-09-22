@@ -108,7 +108,6 @@ class TestWCSSourceCache:
 
     @pytest.mark.parametrize("kwargs", [
         {"extra_subsets": ['time("2023-01-01T00:00:00.000Z")']},
-        {"valid_range": (0.0, 100.0)},
         {"format": "application/x-geotiff"},
         {"axis_labels": ("lon", "lat")},
     ])
@@ -126,6 +125,22 @@ class TestWCSSourceCache:
         assert data_a.array.mean() == pytest.approx(1.0)
         assert data_b.array.mean() == pytest.approx(2.0)
         assert len(list(tmp_path.glob("*.npy"))) == 2
+
+    def test_valid_range_shares_one_cache_entry(self, small_grid, tmp_path):
+        """The cached array is the one the server sent, so the range is applied on top."""
+        tiff = _make_tiff_bytes(np.full((5, 5), -9999.0, np.float32))
+        with patch("requests.get", return_value=MagicMock(ok=True, content=tiff)) as mock_get:
+            unmasked = WCSSource(
+                "http://x.com/wcs", "layer", cache_dir=tmp_path,
+            ).fetch(grid=small_grid)
+            masked = WCSSource(
+                "http://x.com/wcs", "layer", cache_dir=tmp_path, valid_range=(0.0, None),
+            ).fetch(grid=small_grid)
+
+        assert mock_get.call_count == 1
+        assert len(list(tmp_path.glob("*.npy"))) == 1
+        assert unmasked.array.mean() == pytest.approx(-9999.0)
+        assert np.all(np.isnan(masked.array))
 
 
 class TestURLSourceCache:

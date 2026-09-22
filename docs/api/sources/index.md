@@ -3,12 +3,15 @@
 All data sources inherit from `DataSource` and implement a single method:
 
 ```python
-def fetch(self, grid: GridSpec | None = None) -> RasterData:
+def _fetch(self, grid: GridSpec | None = None) -> RasterData:
     ...
 ```
 
 `RasterData` is a named tuple `(array: np.ndarray, crs: str | None, transform: Affine | None)`.
 No rasterio objects are ever exposed outside a source module.
+
+Callers use `fetch()`, which the base class provides. It calls `_fetch()` and applies
+`valid_range`.
 
 ## Source catalogue
 
@@ -33,6 +36,25 @@ edges, so it covers edges that curve in lon/lat, and it reaches the pole for pol
 A grid crossing the antimeridian gets a box spanning nearly all longitudes.
 
 Grid-aware sources are: `WCSSource`, `PointGridSource`.
+
+## Masking sentinel values with `valid_range`
+
+Every source takes `valid_range=(lo, hi)`. Values below `lo` or above `hi` are replaced
+with NaN, so they are excluded from inference instead of being discretised as real values.
+Both bounds are inclusive, and either may be `None` to leave that side unbounded:
+
+```python
+geobn.RasterSource("dem.tif", valid_range=(-500.0, 9000.0))  # mask both tails
+geobn.RasterSource("dem.tif", valid_range=(0.0, None))       # mask negatives only
+```
+
+The three GeoTIFF-backed sources (`RasterSource`, `URLSource`, `WCSSource`) convert a
+declared nodata value and any mask band to NaN on their own. `valid_range` covers the data
+that declares nothing and encodes missing values as an extreme number, such as −9999 or
+32767.
+
+For the cached sources the range is applied to the array on its way out, so the cache holds
+the data as it arrived and changing the range does not trigger a new request.
 
 ## DataSource ABC
 

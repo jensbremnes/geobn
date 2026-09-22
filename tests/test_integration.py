@@ -290,7 +290,7 @@ class TestAutoGridResolution:
 
         class FakeGridAwareSource(DataSource):
             requires_grid = True
-            def fetch(self, grid=None):
+            def _fetch(self, grid=None):
                 raise RuntimeError("should not be called")  # pragma: no cover
 
         bn.set_input("slope",    FakeGridAwareSource())

@@ -34,11 +34,19 @@ Every source must implement:
 
 ```python
 class MySource(DataSource):
-    def fetch(self, grid: GridSpec | None = None) -> RasterData:
+    def __init__(self, ..., valid_range=None) -> None:
+        super().__init__(valid_range=valid_range)
+        ...
+
+    def _fetch(self, grid: GridSpec | None = None) -> RasterData:
         ...
 ```
 
-If the source requires credentials, validate them in `__init__()` before `fetch()` is called.
+The base class provides the public `fetch()`, which calls `_fetch()` and applies
+`valid_range`; take the argument and hand it to `super().__init__()` so the source masks
+sentinel values like every other one.
+
+If the source requires credentials, validate them in `__init__()` before `_fetch()` is called.
 
 ## Building docs locally
 

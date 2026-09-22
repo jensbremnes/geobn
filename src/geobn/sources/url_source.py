@@ -30,14 +30,27 @@ class URLSource(DataSource):
     cache_dir:
         Optional path to a directory for caching the fetched raster on disk.
         On a cache hit the HTTP request is skipped entirely.
+    valid_range:
+        Optional ``(lo, hi)`` tuple.  Values outside this range become NaN.
+        Use it for files that encode missing data as an extreme number
+        without declaring it as nodata.  Either bound may be ``None``.  The
+        cached array is the one the server sent, so changing the range
+        re-masks it without downloading again.
     """
 
-    def __init__(self, url: str, timeout: int = 60, cache_dir: str | Path | None = None) -> None:
+    def __init__(
+        self,
+        url: str,
+        timeout: int = 60,
+        cache_dir: str | Path | None = None,
+        valid_range: tuple[float | None, float | None] | None = None,
+    ) -> None:
+        super().__init__(valid_range=valid_range)
         self._url = url
         self._timeout = timeout
         self._cache_dir = Path(cache_dir).expanduser() if cache_dir is not None else None
 
-    def fetch(self, grid: GridSpec | None = None) -> RasterData:
+    def _fetch(self, grid: GridSpec | None = None) -> RasterData:
         # ── Cache check ───────────────────────────────────────────────────
         if self._cache_dir is not None:
             from ._cache import _load_cached, _make_cache_path, _save_cached  # noqa: PLC0415

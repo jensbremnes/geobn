@@ -341,3 +341,103 @@ def test_wcs_v1_ignores_axis_labels(small_grid):
 def test_wcs_invalid_axis_labels_raise(labels):
     with pytest.raises(ValueError, match="axis_labels"):
         WCSSource("https://example.com/wcs", "cov", axis_labels=labels)
+
+
+# ---------------------------------------------------------------------------
+# valid_range on every source
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    "bad",
+    [(9000.0, -500.0), (None, None), (0.0, float("nan")), (0.0,), 0.0, "0,100", (0.0, "hi")],
+)
+def test_invalid_valid_range_raises(bad):
+    with pytest.raises(ValueError, match="valid_range"):
+        geobn.ConstantSource(1.0, valid_range=bad)
+
+
+def test_raster_source_valid_range_masks_sentinels(tmp_path):
+    """A file with no declared nodata still masks its sentinels via valid_range."""
+    raw = np.array([[10.0, -9999.0], [9001.0, 20.0]], dtype=np.float32)
+    path = tmp_path / "sentinels.tif"
+    path.write_bytes(_make_geotiff_bytes(raw))
+
+    data = geobn.RasterSource(path, valid_range=(-500.0, 9000.0)).fetch()
+
+    assert data.array[0, 0] == pytest.approx(10.0)
+    assert data.array[1, 1] == pytest.approx(20.0)
+    assert np.isnan(data.array[0, 1])
+    assert np.isnan(data.array[1, 0])
+
+
+def test_url_source_valid_range_masks_sentinels():
+    raw = np.array([[5.0, -9999.0]], dtype=np.float32)
+    mock_response = MagicMock()
+    mock_response.raise_for_status = lambda: None
+    mock_response.content = _make_geotiff_bytes(raw)
+
+    with patch("requests.get", return_value=mock_response):
+        source = geobn.URLSource("https://example.com/dem.tif", valid_range=(-500.0, 9000.0))
+        data = source.fetch()
+
+    assert data.array[0, 0] == pytest.approx(5.0)
+    assert np.isnan(data.array[0, 1])
+
+
+def test_valid_range_masks_only_the_low_side():
+    raw = np.array([[-1.0, 5.0, 9001.0]], dtype=np.float32)
+    data = geobn.ArraySource(raw, valid_range=(0.0, None)).fetch()
+
+    assert np.isnan(data.array[0, 0])
+    assert data.array[0, 1] == pytest.approx(5.0)
+    assert data.array[0, 2] == pytest.approx(9001.0)
+
+
+def test_valid_range_masks_only_the_high_side():
+    raw = np.array([[-1.0, 5.0, 9001.0]], dtype=np.float32)
+    data = geobn.ArraySource(raw, valid_range=(None, 9000.0)).fetch()
+
+    assert data.array[0, 0] == pytest.approx(-1.0)
+    assert data.array[0, 1] == pytest.approx(5.0)
+    assert np.isnan(data.array[0, 2])
+
+
+def test_valid_range_bounds_are_inclusive():
+    raw = np.array([[0.0, 100.0]], dtype=np.float32)
+    data = geobn.ArraySource(raw, valid_range=(0.0, 100.0)).fetch()
+
+    np.testing.assert_array_equal(data.array, raw)
+
+
+def test_valid_range_keeps_existing_nan():
+    raw = np.array([[np.nan, 5.0]], dtype=np.float32)
+    data = geobn.ArraySource(raw, valid_range=(0.0, 10.0)).fetch()
+
+    assert np.isnan(data.array[0, 0])
+    assert data.array[0, 1] == pytest.approx(5.0)
+
+
+def test_array_source_valid_range_does_not_mutate_caller_array():
+    """Masking must copy: the array handed in stays usable across fetches."""
+    raw = np.array([[1.0, -9999.0]], dtype=np.float32)
+    source = geobn.ArraySource(raw, valid_range=(0.0, None))
+
+    first = source.fetch()
+    second = source.fetch()
+
+    assert raw[0, 1] == pytest.approx(-9999.0)
+    assert np.isnan(first.array[0, 1])
+    assert np.isnan(second.array[0, 1])
+
+
+def test_constant_source_valid_range_gives_nodata():
+    data = geobn.ConstantSource(-9999.0, valid_range=(0.0, None)).fetch()
+    assert np.isnan(data.array[0, 0])
+
+
+def test_point_grid_source_valid_range_masks_sentinels(small_grid):
+    source = PointGridSource(
+        fn=lambda lat, lon: -9999.0, sample_points=2, delay=0.0, valid_range=(0.0, None)
+    )
+    data = source.fetch(grid=small_grid)
+    assert np.all(np.isnan(data.array))

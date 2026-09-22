@@ -38,15 +38,18 @@ The axis names are listed in the server's DescribeCoverage response.
 If the returned GeoTIFF declares a nodata value, those pixels are converted to NaN
 automatically. Pass `valid_range=(lo, hi)` to additionally replace out-of-range
 sentinel values with NaN — needed for services that encode nodata as extreme
-numbers without declaring it.
+numbers without declaring it. See
+[Masking sentinel values](index.md#masking-sentinel-values-with-valid_range) for the
+full description; it works the same on every source.
 
 ### Disk caching
 
 Pass `cache_dir` to cache responses to disk. The cache key is a SHA-256 hash of the
-request URL and parameters (bounding box, output size, format, axis labels, extra
-subsets and `valid_range`), plus an internal cache-format version (bumped when cached
-content semantics change, so outdated entries are refetched). Corrupt or missing cache
-entries trigger a fresh request.
+request URL and parameters (bounding box, output size, format, axis labels and extra
+subsets), plus an internal cache-format version (bumped when cached content semantics
+change, so outdated entries are refetched). Corrupt or missing cache entries trigger a
+fresh request. `valid_range` is not part of the key: the response is cached as it
+arrived and the range is applied on the way out, so adjusting it costs no new request.
 
 ### Recipes
 
