@@ -44,6 +44,7 @@ pip install -e ".[dev]"
 | `URLSource(url, timeout, cache_dir)` | Remote Cloud-Optimised GeoTIFF |
 | `WCSSource(url, layer, version)` | Generic OGC WCS endpoint (terrain, bathymetry, …) |
 | `PointGridSource(fn, sample_points, delay)` | Sample any `fn(lat, lon) -> float` over the bounding box with user-defined resolution |
+| `MosaicSource(sources, names)` | Combine several sources, taking each pixel from the first one that has data |
 
 `URLSource`, `WCSSource` and `PointGridSource` also take `cache_dir` and `cache_ttl` to cache
 fetched data on disk and expire it after a given age.
@@ -70,7 +71,7 @@ DataSources  →  align to grid  →  discretize  →  BN inference  →  Infere
 
 ## Usage
 
-The examples below use the bundled Lyngen Alps avalanche risk model (see [`examples/lyngen_alps/`](examples/lyngen_alps/)) and demonstrate all six source types.
+The examples below use the bundled Lyngen Alps avalanche risk model (see [`examples/lyngen_alps/`](examples/lyngen_alps/)) and demonstrate all seven source types.
 
 ### Loading a network
 
@@ -136,6 +137,21 @@ bn.set_input("wind_load", geobn.PointGridSource(fetch_wind_speed, sample_points=
 
 # ConstantSource — broadcast a single scalar over the entire grid
 bn.set_input("temperature", geobn.ConstantSource(-5.0))   # °C
+
+# MosaicSource — several sources, best first; each pixel comes from the first
+# one that has data there
+snow = geobn.MosaicSource(
+    [
+        geobn.RasterSource("local_snow_survey.tif"),
+        geobn.URLSource("https://example.com/recent_snow.tif"),
+        geobn.ConstantSource(30.0),
+    ],
+    names=["survey", "regional", "climatology"],
+)
+bn.set_input("recent_snow", snow)
+
+# ... and read back which source supplied each pixel
+values, provenance = bn.fetch_raw(snow, return_provenance=True)
 ```
 
 ### Discretizing continuous inputs

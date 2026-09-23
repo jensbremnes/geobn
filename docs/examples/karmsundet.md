@@ -41,7 +41,7 @@ nodes each — this is valid in pgmpy and requires no special handling.
 | Node | Source | Details |
 |------|--------|---------|
 | `water_depth` | `WCSSource` (EMODnet Bathymetry) | ~115 m global coverage; cached locally |
-| `vessel_traffic` | `RasterSource` (AIS density GeoTIFF) | enc/km²/day; falls back to `ConstantSource(2.0)` |
+| `vessel_traffic` | `MosaicSource` (AIS density GeoTIFF, then a prior) | enc/km²/day, backed by `ConstantSource(2.0)` |
 | `wave_height` | `PointGridSource` (Met.no Oceanforecast) | `sea_surface_wave_height`, 5×5 grid; cached |
 | `current_speed` | `PointGridSource` (Met.no Oceanforecast) | `sea_water_speed`, 5×5 grid; cached |
 | `wind_speed` | `PointGridSource` (Met.no Locationforecast) | `wind_speed`, 5×5 grid; cached |
@@ -110,8 +110,18 @@ indistinguishable.
 ### 4. Wire all inputs and set discretization
 
 ```python
-bn.set_input("water_depth",     geobn.ArraySource(depth))
-bn.set_input("vessel_traffic",  geobn.RasterSource(ais_path))  # or ConstantSource fallback
+bn.set_input("water_depth", geobn.ArraySource(depth))
+
+# AIS density where the raster has data, a medium-traffic prior everywhere else.
+ais_source = geobn.MosaicSource(
+    [geobn.RasterSource(ais_path), geobn.ConstantSource(2.0)],
+    names=["ais_density", "medium_traffic_prior"],
+    on_error="skip",
+)
+bn.set_input("vessel_traffic", ais_source)
+
+# The provenance layer says which pixels came from which source.
+ais_raw, ais_provenance = bn.fetch_raw(ais_source, return_provenance=True)
 
 bn.set_discretization("water_depth",     [0, 5, 20, 50, 200, 2000])
 bn.set_discretization("vessel_traffic",  [0.0, 1.0, 3.0, 1000.0])
@@ -140,20 +150,25 @@ risk_score = (probs * np.array([10.0, 50.0, 90.0])).sum(axis=-1)
 
 result.to_geotiff(OUT_DIR)   # 4-band GeoTIFF: P(low), P(medium), P(high), entropy
 result.show_map(OUT_DIR, filename="usv_risk_map.html",
-                extra_layers={"Risk score (10–90)": risk_score, "Water depth (m)": depth})
+                extra_layers={"Risk score (10–90)": risk_score,
+                              "Water depth (m)": depth,
+                              "AIS traffic density": ais_raw,
+                              "AIS source index": ais_provenance.astype(np.float32)})
 ```
 
 ## Key outputs
 
 - **`output/usv_risk_map.html`** — interactive Leaflet map with USV risk probability,
-  entropy, risk score, and depth overlays
+  entropy, risk score, depth, AIS traffic density and the AIS source index overlays
 - **`output/usv_risk.tif`** — 4-band GeoTIFF:
   Band 1 P(low), Band 2 P(medium), Band 3 P(high), Band 4 entropy
 - **`output/risk_score.tif`** — scalar risk score in the range 10–90
 
 ## AIS traffic density
 
-The script falls back to `ConstantSource(2.0)` when no AIS raster is present.
+`ConstantSource(2.0)` stands in for the AIS raster wherever it has no data, including
+when the file is absent altogether. `on_error="skip"` is what allows a missing file to
+count as no data; the run then prints which share of the grid came from each source.
 To generate a real raster from Kystverket open data:
 
 1. Download historical AIS CSV from [kystdatahuset.no](https://kystdatahuset.no)

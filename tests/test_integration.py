@@ -458,3 +458,111 @@ class TestSuggestBreakpoints:
         bn.set_input("slope", Exploding(1.0))
         with pytest.raises(ValueError, match="Unknown method"):
             bn.suggest_breakpoints("slope", method="nope")
+
+
+class TestMosaicSourceEndToEnd:
+    """A mosaic behaves like the sources it wraps, including under the auto-grid."""
+
+    @staticmethod
+    def _half(value: float, shape: tuple[int, int] = (10, 10)) -> np.ndarray:
+        """*value* on the northern half of the array, NaN on the southern half."""
+        array = np.full(shape, np.nan, dtype=np.float32)
+        array[: shape[0] // 2, :] = value
+        return array
+
+    def test_auto_grid_uses_the_mosaic(self, bn):
+        """The mosaic seeds the reference grid, as its best source would on its own."""
+        coarse_transform = Affine(0.5, 0, 0.0, 0, -0.5, 50.0)
+        fine_transform = Affine(0.1, 0, 0.0, 0, -0.1, 50.0)
+
+        bn.set_input(
+            "slope",
+            geobn.MosaicSource(
+                [
+                    geobn.ArraySource(
+                        np.full((10, 10), 5.0, dtype=np.float32),
+                        crs="EPSG:4326",
+                        transform=fine_transform,
+                    ),
+                    geobn.ConstantSource(5.0),
+                ]
+            ),
+        )
+        bn.set_input(
+            "rainfall",
+            geobn.ArraySource(
+                np.full((2, 2), 50.0, dtype=np.float32),
+                crs="EPSG:4326",
+                transform=coarse_transform,
+            ),
+        )
+        bn.set_discretization("slope", [0, 10, 30, 90], ["flat", "moderate", "steep"])
+        bn.set_discretization("rainfall", [0, 25, 75, 200], ["low", "medium", "high"])
+
+        result = bn.infer(query=["fire_risk"])
+
+        assert result.probabilities["fire_risk"].shape[:2] == (10, 10)
+
+    def test_mosaic_is_merged_after_the_grid_is_known(self, bn):
+        """The blind probe seeds the grid; the merge still runs on the refetch."""
+        transform = Affine(0.1, 0, 0.0, 0, -0.1, 50.0)
+        patchy = geobn.ArraySource(self._half(5.0), crs="EPSG:4326", transform=transform)
+
+        bn.set_input("slope", geobn.MosaicSource([patchy, geobn.ConstantSource(15.0)]))
+        bn.set_input(
+            "rainfall",
+            geobn.ArraySource(
+                np.full((10, 10), 50.0, dtype=np.float32),
+                crs="EPSG:4326",
+                transform=transform,
+            ),
+        )
+        bn.set_discretization("slope", [0, 10, 30, 90], ["flat", "moderate", "steep"])
+        bn.set_discretization("rainfall", [0, 25, 75, 200], ["low", "medium", "high"])
+
+        result = bn.infer(query=["fire_risk"])
+
+        # The constant covers the southern half, so no pixel is left without data.
+        probs = result.probabilities["fire_risk"]
+        assert not np.isnan(probs).any()
+
+    def test_fetch_raw_returns_values_and_provenance(self, bn):
+        bn.set_grid("EPSG:4326", 0.1, (0.0, 49.0, 1.0, 50.0))
+        transform = Affine(0.1, 0, 0.0, 0, -0.1, 50.0)
+        mosaic = geobn.MosaicSource(
+            [
+                geobn.ArraySource(self._half(5.0), crs="EPSG:4326", transform=transform),
+                geobn.ConstantSource(15.0),
+            ],
+            names=["survey", "prior"],
+        )
+
+        values, provenance = bn.fetch_raw(mosaic, return_provenance=True)
+
+        assert values.shape == provenance.shape == bn._grid.shape
+        assert provenance.dtype == np.int16
+        assert set(np.unique(provenance)) == {0, 1}
+        assert values[provenance == 0].min() == pytest.approx(5.0)
+        assert values[provenance == 1].min() == pytest.approx(15.0)
+        assert mosaic.names == ["survey", "prior"]
+
+    def test_fetch_raw_provenance_of_a_single_source(self, bn):
+        """A source that is not a mosaic has one layer, so it reports a coverage mask."""
+        bn.set_grid("EPSG:4326", 0.1, (0.0, 49.0, 1.0, 50.0))
+        transform = Affine(0.1, 0, 0.0, 0, -0.1, 50.0)
+        source = geobn.ArraySource(self._half(5.0), crs="EPSG:4326", transform=transform)
+
+        values, provenance = bn.fetch_raw(source, return_provenance=True)
+
+        assert provenance.dtype == np.int16
+        np.testing.assert_array_equal(provenance == -1, np.isnan(values))
+        np.testing.assert_array_equal(provenance[~np.isnan(values)], 0)
+
+    def test_fetch_raw_without_provenance_returns_a_bare_array(self, bn):
+        bn.set_grid("EPSG:4326", 0.1, (0.0, 49.0, 1.0, 50.0))
+        mosaic = geobn.MosaicSource([geobn.ConstantSource(42.0)])
+
+        values = bn.fetch_raw(mosaic)
+
+        assert isinstance(values, np.ndarray)
+        assert np.all(values == 42.0)

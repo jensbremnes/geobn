@@ -335,7 +335,9 @@ class GeoBayesianNetwork:
         H, W = self._grid.shape
         _log.info("Grid set: %s, resolution=%g, shape=%d×%d", crs, resolution, H, W)
 
-    def fetch_raw(self, source: DataSource) -> np.ndarray:
+    def fetch_raw(
+        self, source: DataSource, return_provenance: bool = False
+    ) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
         """Fetch a data source using the BN's grid and return a plain numpy array.
 
         Useful when you need the raw values to derive additional inputs — for
@@ -348,19 +350,34 @@ class GeoBayesianNetwork:
         source:
             Any :class:`~geobn.sources.DataSource` to fetch.  The source is
             not registered as an input.
+        return_provenance:
+            Also return a layer saying where each pixel came from.  For a
+            :class:`~geobn.MosaicSource` this is the index of the source that
+            supplied the pixel, into ``source.names``.  Any other source has
+            one layer, so every pixel that has data is 0.
 
         Returns
         -------
         np.ndarray
             Float32 array of shape (H, W), aligned to the BN's grid.
             NaN where the source has no data.
+        tuple[np.ndarray, np.ndarray]
+            With ``return_provenance=True``, that array and an int16 array of
+            the same shape holding the source index per pixel, or ``-1`` where
+            no source had data.
         """
         if self._grid is None:
             raise RuntimeError(
                 "No grid configured.  Call bn.set_grid(crs, resolution, extent) first."
             )
-        data = source.fetch(grid=self._grid)
-        return align_to_grid(data, self._grid)
+        if not return_provenance:
+            return align_to_grid(source.fetch(grid=self._grid), self._grid)
+
+        data, provenance = source.fetch_with_provenance(grid=self._grid)
+        array = align_to_grid(data, self._grid)
+        if provenance is None:
+            provenance = np.where(np.isnan(array), -1, 0).astype(np.int16)
+        return array, provenance
 
     # ------------------------------------------------------------------
     # Real-time optimisation
@@ -971,7 +988,10 @@ class GeoBayesianNetwork:
                 if source.requires_grid:
                     continue  # needs bbox first — skip for now
                 data = source.fetch(grid=None)
-                pre_fetched[node] = data
+                if not source.probe_only:
+                    # A probe carries spatial information but not the node's
+                    # real data, so it must not be reused as the fetch result.
+                    pre_fetched[node] = data
                 if data.crs is None:
                     continue  # ConstantSource or similar — no spatial info
                 grid_candidate = GridSpec.from_raster_data(data)

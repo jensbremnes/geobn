@@ -7,6 +7,7 @@ from .result import InferenceResult
 from .sources import (
     ArraySource,
     ConstantSource,
+    MosaicSource,
     PointGridSource,
     RasterSource,
     URLSource,
@@ -48,6 +49,7 @@ __all__ = [
     "InferenceResult",
     "ArraySource",
     "ConstantSource",
+    "MosaicSource",
     "PointGridSource",
     "RasterSource",
     "URLSource",
