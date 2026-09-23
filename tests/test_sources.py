@@ -441,3 +441,260 @@ def test_point_grid_source_valid_range_masks_sentinels(small_grid):
     )
     data = source.fetch(grid=small_grid)
     assert np.all(np.isnan(data.array))
+
+
+# ---------------------------------------------------------------------------
+# MosaicSource
+# ---------------------------------------------------------------------------
+
+
+def _grid_aligned(array: np.ndarray) -> geobn.ArraySource:
+    """An ArraySource that align_to_grid passes through unchanged."""
+    return geobn.ArraySource(array)
+
+
+def _patchy(shape: tuple[int, int], rows: slice, value: float) -> np.ndarray:
+    """An array holding *value* on *rows* and NaN everywhere else."""
+    array = np.full(shape, np.nan, dtype=np.float32)
+    array[rows, :] = value
+    return array
+
+
+class _CountingSource(geobn.sources.DataSource):
+    """Records how many times it was fetched."""
+
+    def __init__(self, value: float = 1.0) -> None:
+        super().__init__()
+        self._value = value
+        self.calls = 0
+
+    def _fetch(self, grid=None) -> RasterData:
+        self.calls += 1
+        return RasterData(
+            array=np.array([[self._value]], dtype=np.float32), crs=None, transform=None
+        )
+
+
+class TestMosaicSource:
+    def test_first_source_with_data_wins(self, small_grid):
+        top = _patchy((5, 5), slice(0, 2), 1.0)
+        bottom = _patchy((5, 5), slice(1, 5), 2.0)
+        mosaic = geobn.MosaicSource([_grid_aligned(top), _grid_aligned(bottom)])
+
+        data = mosaic.fetch(grid=small_grid)
+
+        # Row 1 overlaps: the higher-priority source keeps it.
+        np.testing.assert_array_equal(data.array[:2, :], np.full((2, 5), 1.0))
+        np.testing.assert_array_equal(data.array[2:, :], np.full((3, 5), 2.0))
+
+    def test_constant_tail_fills_the_remainder(self, small_grid):
+        top = _patchy((5, 5), slice(0, 2), 1.0)
+        mosaic = geobn.MosaicSource([_grid_aligned(top), geobn.ConstantSource(9.0)])
+
+        data = mosaic.fetch(grid=small_grid)
+
+        np.testing.assert_array_equal(data.array[:2, :], np.full((2, 5), 1.0))
+        np.testing.assert_array_equal(data.array[2:, :], np.full((3, 5), 9.0))
+
+    def test_single_source_matches_the_bare_source(self, small_grid):
+        array = _patchy((5, 5), slice(0, 3), 4.0)
+        bare = _grid_aligned(array).fetch(grid=small_grid)
+        mosaic = geobn.MosaicSource([_grid_aligned(array)]).fetch(grid=small_grid)
+
+        np.testing.assert_array_equal(mosaic.array, bare.array)
+
+    def test_output_sits_on_the_reference_grid(self, small_grid):
+        mosaic = geobn.MosaicSource([geobn.ConstantSource(3.0)])
+
+        data = mosaic.fetch(grid=small_grid)
+
+        assert data.array.shape == small_grid.shape
+        assert data.crs == small_grid.crs
+        assert data.transform == small_grid.transform
+
+    def test_sources_are_reprojected_before_merging(self, small_grid, tmp_path):
+        """A source in another CRS is aligned first, so it can be compared pixel by pixel."""
+        import rasterio
+        from pyproj import Transformer
+        from rasterio.transform import from_bounds
+
+        transformer = Transformer.from_crs("EPSG:4326", "EPSG:32632", always_xy=True)
+        # North-west quadrant of the grid only, so the constant has work to do.
+        x_min, y_min = transformer.transform(5.0, 61.8)
+        x_max, y_max = transformer.transform(5.2, 62.0)
+        path = tmp_path / "utm.tif"
+        with rasterio.open(
+            path, "w", driver="GTiff", height=8, width=8, count=1,
+            dtype="float32", crs="EPSG:32632",
+            transform=from_bounds(x_min, y_min, x_max, y_max, 8, 8),
+        ) as dst:
+            dst.write(np.full((8, 8), 7.0, dtype=np.float32), 1)
+
+        mosaic = geobn.MosaicSource(
+            [geobn.RasterSource(path), geobn.ConstantSource(9.0)]
+        )
+        data = mosaic.fetch(grid=small_grid)
+
+        # The UTM raster covers the north-west corner; the constant fills the rest.
+        assert data.array[0, 0] == pytest.approx(7.0)
+        assert data.array[4, 4] == pytest.approx(9.0)
+
+    def test_covered_grid_stops_further_fetches(self, small_grid):
+        tail = _CountingSource(1.0)
+        mosaic = geobn.MosaicSource([geobn.ConstantSource(5.0), tail])
+
+        mosaic.fetch(grid=small_grid)
+
+        assert tail.calls == 0
+
+    def test_valid_range_applies_after_merging(self, small_grid):
+        top = _patchy((5, 5), slice(0, 2), -9999.0)
+        mosaic = geobn.MosaicSource(
+            [_grid_aligned(top), geobn.ConstantSource(9.0)], valid_range=(0.0, None)
+        )
+
+        data = mosaic.fetch(grid=small_grid)
+
+        # The merge already took those pixels from the top source, so the mask
+        # leaves NaN rather than falling through to the constant.
+        assert np.all(np.isnan(data.array[:2, :]))
+        np.testing.assert_array_equal(data.array[2:, :], np.full((3, 5), 9.0))
+
+    def test_source_valid_range_applies_before_merging(self, small_grid):
+        top = _patchy((5, 5), slice(0, 2), -9999.0)
+        mosaic = geobn.MosaicSource(
+            [geobn.ArraySource(top, valid_range=(0.0, None)), geobn.ConstantSource(9.0)]
+        )
+
+        data = mosaic.fetch(grid=small_grid)
+
+        np.testing.assert_array_equal(data.array, np.full((5, 5), 9.0))
+
+    def test_requires_grid_follows_the_sources(self):
+        point = PointGridSource(fn=lambda lat, lon: 1.0, sample_points=2, delay=0.0)
+
+        assert geobn.MosaicSource([point]).requires_grid
+        assert not geobn.MosaicSource([point, geobn.ConstantSource(1.0)]).requires_grid
+
+    def test_grid_aware_mosaic_without_grid_raises(self):
+        point = PointGridSource(fn=lambda lat, lon: 1.0, sample_points=2, delay=0.0)
+        with pytest.raises(ValueError, match="requires a grid context"):
+            geobn.MosaicSource([point]).fetch()
+
+    def test_blind_fetch_probes_the_best_self_contained_source(self):
+        """With no grid the mosaic reports its best source, so the auto-grid can use it."""
+        array = np.full((4, 4), 2.0, dtype=np.float32)
+        transform = Affine(0.1, 0, 5.0, 0, -0.1, 62.0)
+        mosaic = geobn.MosaicSource(
+            [
+                geobn.ArraySource(array, crs="EPSG:4326", transform=transform),
+                geobn.ConstantSource(9.0),
+            ]
+        )
+
+        data = mosaic.fetch()
+
+        assert data.crs == "EPSG:4326"
+        assert data.transform == transform
+
+
+class TestMosaicProvenance:
+    def test_index_per_pixel(self, small_grid):
+        top = _patchy((5, 5), slice(0, 2), 1.0)
+        mosaic = geobn.MosaicSource([_grid_aligned(top), geobn.ConstantSource(9.0)])
+
+        _, provenance = mosaic.fetch_with_provenance(grid=small_grid)
+
+        assert provenance.dtype == np.int16
+        np.testing.assert_array_equal(provenance[:2, :], np.zeros((2, 5), dtype=np.int16))
+        np.testing.assert_array_equal(provenance[2:, :], np.ones((3, 5), dtype=np.int16))
+
+    def test_nodata_where_no_source_has_data(self, small_grid):
+        top = _patchy((5, 5), slice(0, 2), 1.0)
+        mosaic = geobn.MosaicSource([_grid_aligned(top)])
+
+        data, provenance = mosaic.fetch_with_provenance(grid=small_grid)
+
+        assert np.all(np.isnan(data.array[2:, :]))
+        np.testing.assert_array_equal(provenance[2:, :], np.full((3, 5), -1, dtype=np.int16))
+
+    def test_valid_range_blanks_the_provenance_too(self, small_grid):
+        top = _patchy((5, 5), slice(0, 2), -9999.0)
+        mosaic = geobn.MosaicSource(
+            [_grid_aligned(top), geobn.ConstantSource(9.0)], valid_range=(0.0, None)
+        )
+
+        _, provenance = mosaic.fetch_with_provenance(grid=small_grid)
+
+        np.testing.assert_array_equal(provenance[:2, :], np.full((2, 5), -1, dtype=np.int16))
+
+    def test_default_names_label_class_and_position(self):
+        mosaic = geobn.MosaicSource([geobn.ConstantSource(1.0), geobn.ConstantSource(2.0)])
+        assert mosaic.names == ["ConstantSource[0]", "ConstantSource[1]"]
+
+    def test_names_are_returned_in_priority_order(self):
+        mosaic = geobn.MosaicSource(
+            [geobn.ConstantSource(1.0), geobn.ConstantSource(2.0)],
+            names=["survey", "prior"],
+        )
+        assert mosaic.names == ["survey", "prior"]
+
+    def test_names_cannot_be_mutated_through_the_property(self):
+        mosaic = geobn.MosaicSource([geobn.ConstantSource(1.0)], names=["survey"])
+        mosaic.names.append("oops")
+        assert mosaic.names == ["survey"]
+
+
+class TestMosaicErrors:
+    def test_failing_source_raises_by_default(self, small_grid, tmp_path):
+        mosaic = geobn.MosaicSource(
+            [geobn.RasterSource(tmp_path / "missing.tif"), geobn.ConstantSource(9.0)]
+        )
+        with pytest.raises(Exception, match="missing.tif"):
+            mosaic.fetch(grid=small_grid)
+
+    def test_skip_falls_through_with_a_warning(self, small_grid, tmp_path):
+        mosaic = geobn.MosaicSource(
+            [geobn.RasterSource(tmp_path / "missing.tif"), geobn.ConstantSource(9.0)],
+            names=["ais", "prior"],
+            on_error="skip",
+        )
+
+        with pytest.warns(UserWarning, match="Skipping 'ais' in the mosaic"):
+            data, provenance = mosaic.fetch_with_provenance(grid=small_grid)
+
+        np.testing.assert_array_equal(data.array, np.full((5, 5), 9.0))
+        np.testing.assert_array_equal(provenance, np.ones((5, 5), dtype=np.int16))
+
+    def test_skip_applies_to_the_blind_probe(self, tmp_path):
+        mosaic = geobn.MosaicSource(
+            [geobn.RasterSource(tmp_path / "missing.tif"), geobn.ConstantSource(9.0)],
+            on_error="skip",
+        )
+
+        with pytest.warns(UserWarning, match="Skipping"):
+            data = mosaic.fetch()
+
+        # Falls back to a source with no spatial information, as ConstantSource has.
+        assert data.crs is None
+
+    @pytest.mark.parametrize(
+        "bad",
+        [[], (), geobn.ConstantSource(1.0), "raster.tif", [geobn.ConstantSource(1.0), "x"]],
+    )
+    def test_invalid_sources_raise(self, bad):
+        with pytest.raises(ValueError, match="sources"):
+            geobn.MosaicSource(bad)
+
+    @pytest.mark.parametrize(
+        "bad", [["only"], "survey", ["survey", "survey"], ["survey", ""], ["survey", 2]]
+    )
+    def test_invalid_names_raise(self, bad):
+        sources = [geobn.ConstantSource(1.0), geobn.ConstantSource(2.0)]
+        with pytest.raises(ValueError, match="names"):
+            geobn.MosaicSource(sources, names=bad)
+
+    @pytest.mark.parametrize("bad", ["ignore", "RAISE", None, True])
+    def test_invalid_on_error_raises(self, bad):
+        with pytest.raises(ValueError, match="on_error"):
+            geobn.MosaicSource([geobn.ConstantSource(1.0)], on_error=bad)

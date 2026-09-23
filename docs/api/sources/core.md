@@ -172,3 +172,60 @@ def sea_temperature(lat: float, lon: float) -> float:
 source = geobn.PointGridSource(fn=sea_temperature, sample_points=5, delay=0.1)
 bn.set_input("sea_temp", source)
 ```
+
+---
+
+## MosaicSource
+
+::: geobn.MosaicSource
+    options:
+      show_root_heading: true
+
+Each source is aligned to the reference grid before the merge, so they may differ in CRS,
+resolution and extent. Alignment is bilinear, so the seam between two sources follows the
+resampled footprint of the higher-priority one. Sources are fetched in order and only
+while pixels remain uncovered, so a remote source at the end of the list costs nothing
+when the sources above it already cover the grid.
+
+**Example — a local survey over a regional model:**
+
+```python
+depth = geobn.MosaicSource(
+    [
+        geobn.RasterSource("multibeam_survey.tif"),
+        geobn.WCSSource(url=EMODNET_WCS, layer="emodnet:mean"),
+    ],
+    names=["survey", "emodnet"],
+)
+bn.set_input("water_depth", depth)
+```
+
+**Example — reading the provenance layer:**
+
+```python
+values, provenance = bn.fetch_raw(depth, return_provenance=True)
+
+for index, name in enumerate(depth.names):
+    print(f"{name}: {(provenance == index).mean():.0%} of the grid")
+print(f"no data: {(provenance == -1).mean():.0%}")
+```
+
+**Example — a prior wherever the raster has nothing:**
+
+```python
+# ConstantSource covers the whole grid, so it is the natural last entry.
+traffic = geobn.MosaicSource(
+    [geobn.RasterSource("ais_density.tif"), geobn.ConstantSource(2.0)],
+    names=["ais_density", "medium_traffic_prior"],
+    on_error="skip",
+)
+```
+
+With `on_error="skip"` a source that cannot be fetched at all — a file that is not there,
+an endpoint that is down — counts as having no data, and a `UserWarning` names it. The
+default `on_error="raise"` propagates the error, so a mistyped path is not covered up by
+the source below it.
+
+A `valid_range` on the mosaic applies to the merged values, after a pixel has been taken
+from a source. A `valid_range` on one of the sources applies before the merge, and
+therefore lets the next source fill in the pixels it masks.

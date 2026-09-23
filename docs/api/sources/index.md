@@ -25,6 +25,7 @@ calls `_fetch()` and applies `valid_range`. A source becomes cacheable by also i
 | [`URLSource`](core.md) | Remote GeoTIFF via HTTP |
 | [`WCSSource`](wcs.md) | Generic OGC WCS endpoint |
 | [`PointGridSource`](core.md) | Sample any callable over an N×N lat/lon grid |
+| [`MosaicSource`](core.md) | Combine several sources, best source first |
 
 ## Grid-aware vs self-contained sources
 
@@ -38,6 +39,11 @@ edges, so it covers edges that curve in lon/lat, and it reaches the pole for pol
 A grid crossing the antimeridian gets a box spanning nearly all longitudes.
 
 Grid-aware sources are: `WCSSource`, `PointGridSource`.
+
+`MosaicSource` follows the sources it wraps. It needs the grid to align them before it
+can compare them pixel by pixel, but as long as one of them is self-contained the mosaic
+reports that source when asked without a grid, so an automatic grid can still be derived
+from it.
 
 ## Masking sentinel values with `valid_range`
 

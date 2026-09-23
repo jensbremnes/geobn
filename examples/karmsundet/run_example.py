@@ -26,11 +26,12 @@ water_depth (WCSSource)
     Negative values = below sea level; flipped to positive depth below surface.
     URL: https://ows.emodnet-bathymetry.eu/wcs
 
-vessel_traffic (RasterSource or ConstantSource)
+vessel_traffic (MosaicSource over RasterSource and ConstantSource)
     Pre-processed AIS density GeoTIFF (encounters/km²/day) placed at
-    ``data/ais_density_karmsundet.tif``.  Falls back to ConstantSource(2.0)
-    (medium traffic) when the file is absent — run ``create_ais_density.py``
-    to generate the real raster from Kystverket AIS data.
+    ``data/ais_density_karmsundet.tif``, backed by ConstantSource(2.0)
+    (medium traffic) wherever the raster has no data — run
+    ``create_ais_density.py`` to generate the real raster from Kystverket AIS
+    data.
 
 wave_height, current_speed (PointGridSource → Met.no Oceanforecast)
     Live ocean forecast sampled on a 5×5 grid across the study area.
@@ -220,15 +221,25 @@ def main() -> None:
     # ── 3. Wire inputs ─────────────────────────────────────────────────────
     bn.set_input("water_depth", geobn.ArraySource(depth))
 
-    # AIS traffic density — use pre-computed GeoTIFF if available
+    # AIS traffic density — the pre-computed GeoTIFF where it has data, a
+    # medium-traffic prior everywhere else.
     ais_path = DATA_DIR / "ais_density_karmsundet.tif"
-    if ais_path.exists():
-        print(f"AIS density : loading from {ais_path.name}")
-        bn.set_input("vessel_traffic", geobn.RasterSource(ais_path))
+    ais_source = geobn.MosaicSource(
+        [geobn.RasterSource(ais_path), geobn.ConstantSource(2.0)],
+        names=["ais_density", "medium_traffic_prior"],
+        on_error="skip",
+    )
+    bn.set_input("vessel_traffic", ais_source)
+
+    ais_raw, ais_provenance = bn.fetch_raw(ais_source, return_provenance=True)
+    from_ais = float((ais_provenance == 0).mean())
+    if from_ais:
+        print(f"AIS density : {from_ais:.0%} of the grid from {ais_path.name}, "
+              "the rest from the medium-traffic prior")
     else:
-        print("AIS density : file not found — using ConstantSource(2.0) [medium traffic]")
-        print("              Run create_ais_density.py to generate the real raster.")
-        bn.set_input("vessel_traffic", geobn.ConstantSource(2.0))
+        print("AIS density : medium-traffic prior over the whole grid.")
+        print("              Run create_ais_density.py to generate "
+              f"data/{ais_path.name} from Kystverket AIS data.")
 
     print("\nTesting Met.no API connectivity ...")
     _centre_lat = (SOUTH + NORTH) / 2
@@ -342,13 +353,10 @@ def main() -> None:
         "Risk score (10–90)": risk_score,
         "Water depth (m)": depth,
     }
-    if ais_path.exists():
-        # Load the AIS array for display alongside risk output
-        try:
-            ais_raw = bn.fetch_raw(geobn.RasterSource(ais_path))
-            extra["AIS traffic density"] = ais_raw
-        except Exception:
-            pass
+    # The provenance layer shows which pixels came from AIS and which from
+    # the prior.
+    extra["AIS traffic density"] = ais_raw
+    extra["AIS source index"] = ais_provenance.astype(np.float32)
 
     html_path = result.show_map(
         OUT_DIR,

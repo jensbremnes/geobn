@@ -54,6 +54,11 @@ class DataSource(ABC):
     # Array, URL, Constant) keep the default False.
     requires_grid: bool = False
 
+    # Subclasses whose grid-less fetch returns only enough spatial information
+    # to seed the automatic grid, rather than the source's real data, override
+    # this to True.  infer() then refetches them once the grid is known.
+    probe_only: bool = False
+
     def __init__(
         self,
         valid_range: tuple[float | None, float | None] | None = None,
@@ -78,6 +83,19 @@ class DataSource(ABC):
             sources that are self-contained (Array, Raster, URL, Constant).
         """
         return _apply_valid_range(self._fetch_cached(grid), self._valid_range)
+
+    def fetch_with_provenance(
+        self, grid: GridSpec | None = None
+    ) -> tuple[RasterData, np.ndarray | None]:
+        """Fetch data together with a per-pixel record of where it came from.
+
+        Sources that combine several others, such as
+        :class:`~geobn.MosaicSource`, override this to return the index of the
+        contributing source per pixel.  For a single source there is nothing
+        to distinguish, so the provenance is ``None`` and the caller derives a
+        coverage mask from the data itself.
+        """
+        return self.fetch(grid), None
 
     @abstractmethod
     def _fetch(self, grid: GridSpec | None = None) -> RasterData:
