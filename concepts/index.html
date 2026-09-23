@@ -1,0 +1,1620 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Pixel-wise Bayesian network inference over geospatial data">
+      
+      
+      
+        <link rel="canonical" href="https://jensbremnes.github.io/geobn/concepts/">
+      
+      
+        <link rel="prev" href="../installation/">
+      
+      
+        <link rel="next" href="../api/network/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>How it works - geobn</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="cyan">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#how-it-works" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="geobn" class="md-header__button md-logo" aria-label="geobn" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            geobn
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              How it works
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="cyan"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="cyan"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/jensbremnes/geobn" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    jensbremnes/geobn
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../installation/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Installation
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
+        
+  
+  
+    
+  
+  How it works
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../api/network/" class="md-tabs__link">
+          
+  
+  
+  API Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../examples/lyngen_alps/" class="md-tabs__link">
+          
+  
+  
+  Examples
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../contributing/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Contributing
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="geobn" class="md-nav__button md-logo" aria-label="geobn" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    geobn
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/jensbremnes/geobn" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    jensbremnes/geobn
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How it works
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How it works
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#pipeline-overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pipeline overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#loading-a-bayesian-network" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Loading a Bayesian network
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Loading a Bayesian network">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#using-a-pgmpy-model-directly" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Using a pgmpy model directly
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#attaching-data-sources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Attaching data sources
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Attaching data sources">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#evidence-on-intermediate-nodes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Evidence on intermediate nodes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#gridspec-and-alignment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GridSpec and alignment
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#discretization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Discretization
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Discretization">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#breakpoints-from-the-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Breakpoints from the data
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#nan-nodata-propagation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        NaN / NoData propagation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#inference-batching" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Inference batching
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Inference batching">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-group-pixels-by-observed-evidence-combination" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 1 — group pixels by observed evidence combination
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-choose-a-strategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 2 — choose a strategy
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#summary-of-regimes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Summary of regimes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#output" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#real-time-repeated-inference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Real-time / repeated inference
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/network/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GeoBayesianNetwork
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/realtime/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Real-time optimisation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/result/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    InferenceResult
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/breakpoints/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Breakpoints
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_5" id="__nav_4_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data Sources
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Data Sources
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/sources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/sources/core/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core sources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/sources/wcs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Generic WCS
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/internals/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Internals
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Examples
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/lyngen_alps/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Lyngen Alps (Avalanche)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/karmsundet/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Karmsundet (USV risk)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="how-it-works">How it works</h1>
+<h2 id="pipeline-overview">Pipeline overview</h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>┌──────────────┐     ┌──────────────────┐     ┌──────────────┐     ┌──────────────────┐
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>│ DataSource   │────►│ align_to_grid()  │────►│ discretize() │────►│ BN inference     │
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>│ (per node)   │     │ reproject + resample   │ continuous → │     │ VariableElim.    │
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>└──────────────┘     │ to reference grid│     │ BN states    │     │ batched queries  │
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>                     └──────────────────┘     └──────────────┘     └──────────┬───────┘
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>                                                                               │
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>                                                                    ┌──────────▼───────┐
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>                                                                    │ InferenceResult  │
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>                                                                    │ (H, W, n_states) │
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>                                                                    │ + entropy map    │
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>                                                                    └──────────────────┘
+</code></pre></div>
+<h2 id="loading-a-bayesian-network">Loading a Bayesian network</h2>
+<p><a class="autorefs autorefs-internal" title="load" href="../api/network/#geobn.load"><code>geobn.load()</code></a> picks a reader from the file extension:</p>
+<table>
+<thead>
+<tr>
+<th>Extension</th>
+<th>Format</th>
+<th>Typically written by</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>.bif</code></td>
+<td>BIF (Bayesian Interchange Format)</td>
+<td>bnlearn, most exporters</td>
+</tr>
+<tr>
+<td><code>.xmlbif</code></td>
+<td>XMLBIF</td>
+<td>Weka, JavaBayes</td>
+</tr>
+<tr>
+<td><code>.net</code></td>
+<td>Hugin NET</td>
+<td>Hugin, GeNIe</td>
+</tr>
+<tr>
+<td><code>.xdsl</code></td>
+<td>GeNIe XDSL</td>
+<td>GeNIe / SMILE</td>
+</tr>
+<tr>
+<td><code>.uai</code></td>
+<td>UAI</td>
+<td>UAI competition files</td>
+</tr>
+<tr>
+<td><code>.xml</code></td>
+<td>sniffed from the root element</td>
+<td>see below</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">bn</span> <span class="o">=</span> <span class="n">geobn</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">"my_model.bif"</span><span class="p">)</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">bn</span> <span class="o">=</span> <span class="n">geobn</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">"my_model.xdsl"</span><span class="p">)</span>   <span class="c1"># same call, GeNIe file</span>
+</code></pre></div>
+<p>All readers ship with pgmpy, so no extra dependency is needed. Files are decoded as
+UTF-8, falling back to the platform default encoding.</p>
+<p>A bare <code>.xml</code> file is resolved from its root element: <code>&lt;BIF&gt;</code> is read as XMLBIF,
+<code>&lt;smile&gt;</code> as GeNIe XDSL and <code>&lt;ANALYSISNOTEBOOK&gt;</code> as Microsoft XBN. Any other root
+element raises <code>ValueError</code>.</p>
+<p><code>load()</code> also runs pgmpy's <code>check_model()</code>, so a truncated file or a CPT whose columns
+do not sum to 1 fails at load time rather than deep inside <code>infer()</code>.</p>
+<div class="admonition warning">
+<p class="admonition-title">UAI files carry no names</p>
+<p>The UAI format stores no variable or state names, so nodes come back as <code>var_0</code>,
+<code>var_1</code>, … and states as integers, in file order. <code>geobn.load()</code> emits a
+<code>UserWarning</code> and <code>set_input()</code> / <code>set_discretization()</code> must use those names.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Netica <code>.dne</code></p>
+<p>Not supported — pgmpy has no Netica reader. Export to <code>.net</code> or <code>.bif</code> from Netica.</p>
+</div>
+<h3 id="using-a-pgmpy-model-directly">Using a pgmpy model directly</h3>
+<p><code>GeoBayesianNetwork</code> accepts any pgmpy <code>DiscreteBayesianNetwork</code>, so a model built in
+code, fitted with a pgmpy estimator, or read with a reader <code>load()</code> does not dispatch on
+can be used without going through a file:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pgmpy.readwrite</span><span class="w"> </span><span class="kn">import</span> <span class="n">XBNReader</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">bn</span> <span class="o">=</span> <span class="n">geobn</span><span class="o">.</span><span class="n">GeoBayesianNetwork</span><span class="p">(</span><span class="n">XBNReader</span><span class="p">(</span><span class="s2">"model.dat"</span><span class="p">)</span><span class="o">.</span><span class="n">get_model</span><span class="p">())</span>
+</code></pre></div>
+<p>Unlike <code>load()</code>, this does not run <code>check_model()</code>.</p>
+<h2 id="attaching-data-sources">Attaching data sources</h2>
+<p>Any node in the BN can be an evidence variable. Usually these are the root nodes (no
+parents), but an intermediate or leaf node can be observed just as well. Attach a
+<a class="autorefs autorefs-internal" title="DataSource" href="../api/sources/#geobn.sources.DataSource"><code>DataSource</code></a> to each one:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">bn</span><span class="o">.</span><span class="n">set_input</span><span class="p">(</span><span class="s2">"slope_angle"</span><span class="p">,</span> <span class="n">geobn</span><span class="o">.</span><span class="n">WCSSource</span><span class="p">(</span><span class="n">url</span><span class="o">=</span><span class="s2">"https://example.com/wcs"</span><span class="p">,</span> <span class="n">layer</span><span class="o">=</span><span class="s2">"dtm"</span><span class="p">))</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">bn</span><span class="o">.</span><span class="n">set_input</span><span class="p">(</span><span class="s2">"recent_snow"</span><span class="p">,</span> <span class="n">geobn</span><span class="o">.</span><span class="n">ConstantSource</span><span class="p">(</span><span class="mf">30.0</span><span class="p">))</span>
+</code></pre></div>
+<p>At inference time, geobn inspects all registered georeferenced sources and selects the
+one with the <strong>finest resolution</strong> as the <strong>reference grid</strong> (CRS, resolution, extent).
+Pixel sizes are compared in metres on the ground (measured at each grid's centre), so a
+10 m UTM raster correctly beats a 0.001° WGS84 raster even though 0.001 &lt; 10 in CRS units. All other sources are reprojected to this grid
+automatically. To override this behaviour, call <code>bn.set_grid(crs, resolution, extent)</code>
+explicitly before running inference.</p>
+<h3 id="evidence-on-intermediate-nodes">Evidence on intermediate nodes</h3>
+<p>Evidence is not limited to the nodes at the top of the network. A source attached to an
+intermediate or leaf node observes that node, and the evidence flows in both directions:
+down to its descendants and up to its parents. A dataset that measures an intermediate
+concept directly can therefore be used in place of the layers behind it.</p>
+<p>In the bundled Lyngen model, <code>terrain_factor</code> is an intermediate node with parents
+<code>slope_angle</code>, <code>sun_exposure</code> and <code>forest_cover</code>. Observing it and querying a parent
+gives a distribution over slope classes:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">bn</span> <span class="o">=</span> <span class="n">geobn</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">"avalanche_risk.bif"</span><span class="p">)</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">bn</span><span class="o">.</span><span class="n">set_input</span><span class="p">(</span><span class="s2">"terrain_factor"</span><span class="p">,</span> <span class="n">geobn</span><span class="o">.</span><span class="n">RasterSource</span><span class="p">(</span><span class="s2">"terrain_class.tif"</span><span class="p">))</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">bn</span><span class="o">.</span><span class="n">set_discretization</span><span class="p">(</span><span class="s2">"terrain_factor"</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span> <span class="p">[</span><span class="s2">"low"</span><span class="p">,</span> <span class="s2">"medium"</span><span class="p">,</span> <span class="s2">"high"</span><span class="p">])</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="n">result</span> <span class="o">=</span> <span class="n">bn</span><span class="o">.</span><span class="n">infer</span><span class="p">(</span><span class="n">query</span><span class="o">=</span><span class="p">[</span><span class="s2">"slope_angle"</span><span class="p">])</span>        <span class="c1"># P(slope | observed terrain)</span>
+</code></pre></div>
+<p><code>slope_angle</code> has a uniform prior in that model, so the observation shifts it
+substantially:</p>
+<table>
+<thead>
+<tr>
+<th>observed</th>
+<th>flat</th>
+<th>gentle</th>
+<th>steep</th>
+<th>extreme</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><em>(prior)</em></td>
+<td>0.250</td>
+<td>0.250</td>
+<td>0.250</td>
+<td>0.250</td>
+</tr>
+<tr>
+<td><code>terrain_factor="low"</code></td>
+<td>0.422</td>
+<td>0.375</td>
+<td>0.123</td>
+<td>0.081</td>
+</tr>
+<tr>
+<td><code>terrain_factor="high"</code></td>
+<td>0.006</td>
+<td>0.039</td>
+<td>0.372</td>
+<td>0.583</td>
+</tr>
+</tbody>
+</table>
+<p>This is ordinary Bayesian inference read in the less common direction, and its accuracy
+depends entirely on the CPD being inverted. It is useful for filling gaps and for
+cross-checking one layer against another, and it yields a distribution over states
+rather than a measured value.</p>
+<p>Root inputs are marginally independent, so any combination of them is possible. Inputs
+on nodes with parents are not: observing a node together with its parent in a
+combination the CPD gives probability zero leaves the posterior undefined. Those pixels
+become NaN with a <code>UserWarning</code>, as with any other impossible evidence (see below).</p>
+<p>A node cannot be both an input and a query node. <code>infer()</code>, <code>precompute()</code> and
+<code>load_precomputed()</code> raise <code>ValueError</code> naming it, before any data is fetched.</p>
+<h2 id="gridspec-and-alignment">GridSpec and alignment</h2>
+<p>The reference grid is described by a <code>GridSpec(crs, transform, shape)</code>. Grid alignment
+uses pure numpy + pyproj bilinear interpolation — no rasterio dependency.</p>
+<p><code>ConstantSource</code> is a special case: it returns a 1×1 sentinel array with <code>crs=None</code>,
+which <code>align_to_grid()</code> recognises and broadcasts to the full grid shape.</p>
+<h2 id="discretization">Discretization</h2>
+<p>Bayesian networks operate on discrete states. Every continuous evidence source must be
+mapped to BN state names via <code>set_discretization()</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">bn</span><span class="o">.</span><span class="n">set_discretization</span><span class="p">(</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="s2">"slope_angle"</span><span class="p">,</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="n">breakpoints</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">25</span><span class="p">,</span> <span class="mi">40</span><span class="p">,</span> <span class="mi">90</span><span class="p">],</span>   <span class="c1"># bin edges</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="n">labels</span><span class="o">=</span><span class="p">[</span><span class="s2">"gentle"</span><span class="p">,</span> <span class="s2">"steep"</span><span class="p">,</span> <span class="s2">"extreme"</span><span class="p">],</span>  <span class="c1"># must match BN state names exactly</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="p">)</span>
+</code></pre></div>
+<p><code>breakpoints</code> must have <code>len(labels) + 1</code> values. The interior values are the bin
+edges; a value exactly on an edge goes to the upper bin.</p>
+<p>The first and last breakpoints define the valid range <code>[breakpoints[0], breakpoints[-1]]</code>
+(inclusive). By default (<code>out_of_range="clip"</code>), values outside it are assigned to the
+first or last state, so a slope of 95° counts as <code>"extreme"</code>. Pass
+<code>out_of_range="nan"</code> to treat them as NoData instead:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">bn</span><span class="o">.</span><span class="n">set_discretization</span><span class="p">(</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="s2">"slope_angle"</span><span class="p">,</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>    <span class="n">breakpoints</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">25</span><span class="p">,</span> <span class="mi">40</span><span class="p">,</span> <span class="mi">90</span><span class="p">],</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>    <span class="n">labels</span><span class="o">=</span><span class="p">[</span><span class="s2">"gentle"</span><span class="p">,</span> <span class="s2">"steep"</span><span class="p">,</span> <span class="s2">"extreme"</span><span class="p">],</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>    <span class="n">out_of_range</span><span class="o">=</span><span class="s2">"nan"</span><span class="p">,</span>   <span class="c1"># values &lt; 0 or &gt; 90 → NaN output</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="p">)</span>
+</code></pre></div>
+<p>This is useful when out-of-range values mean bad data (sensor errors, fill values)
+rather than extreme conditions.</p>
+<h3 id="breakpoints-from-the-data">Breakpoints from the data</h3>
+<p><code>geobn.breakpoints</code> computes a breakpoint list from an array, for the two standard
+classification schemes:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">arr</span> <span class="o">=</span> <span class="n">bn</span><span class="o">.</span><span class="n">fetch_raw</span><span class="p">(</span><span class="n">geobn</span><span class="o">.</span><span class="n">RasterSource</span><span class="p">(</span><span class="s2">"slope.tif"</span><span class="p">))</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">geobn</span><span class="o">.</span><span class="n">breakpoints</span><span class="o">.</span><span class="n">quantile</span><span class="p">(</span><span class="n">arr</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>        <span class="c1"># bins with equal pixel counts</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="n">geobn</span><span class="o">.</span><span class="n">breakpoints</span><span class="o">.</span><span class="n">equal_interval</span><span class="p">(</span><span class="n">arr</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>  <span class="c1"># bins of equal width</span>
+</code></pre></div>
+<p><code>bn.suggest_breakpoints(node)</code> does the same for a node that already has a source,
+taking the bin count from the node's states in the BN:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">bn</span><span class="o">.</span><span class="n">set_input</span><span class="p">(</span><span class="s2">"slope_angle"</span><span class="p">,</span> <span class="n">geobn</span><span class="o">.</span><span class="n">RasterSource</span><span class="p">(</span><span class="s2">"slope.tif"</span><span class="p">))</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="n">bn</span><span class="o">.</span><span class="n">set_discretization</span><span class="p">(</span><span class="s2">"slope_angle"</span><span class="p">,</span> <span class="n">bn</span><span class="o">.</span><span class="n">suggest_breakpoints</span><span class="p">(</span><span class="s2">"slope_angle"</span><span class="p">))</span>
+</code></pre></div>
+<p>The outer breakpoints are the data's minimum and maximum, which makes them the valid
+range as well. Pass <code>bounds=</code> to pin a node's physical range instead, so later data
+beyond the values at hand is still in range:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">bn</span><span class="o">.</span><span class="n">suggest_breakpoints</span><span class="p">(</span><span class="s2">"slope_angle"</span><span class="p">,</span> <span class="n">bounds</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">90</span><span class="p">))</span>
+</code></pre></div>
+<p>Breakpoints computed this way describe the data they were computed from. They fit the
+case where a model's conditional probabilities are authored alongside its breakpoints;
+a CPT elicited against fixed thresholds — "steep means over 30°" — needs those
+thresholds.</p>
+<h2 id="nan-nodata-propagation">NaN / NoData propagation</h2>
+<p>NaN values propagate strictly: if <strong>any</strong> input pixel is NaN, that pixel is excluded
+from inference and all output bands for that pixel are NaN.</p>
+<p>This means:
+- Pixels outside WCS coverage → NaN inputs → NaN outputs
+- Sea pixels in a land DEM → NaN depth → NaN output
+- Invalid sensor readings → NaN evidence → NaN posteriors
+- Values outside the breakpoint range with <code>out_of_range="nan"</code> → NaN posteriors
+- File nodata → NaN: <code>RasterSource</code>, <code>URLSource</code> and <code>WCSSource</code> automatically convert
+  pixels matching the GeoTIFF's declared nodata value (or its internal mask) to NaN</p>
+<p>An <code>ArraySource</code> without <code>crs</code>/<code>transform</code> must either match the grid shape exactly
+(pre-aligned) or be a single value; any other shape raises <code>ValueError</code> rather than
+being silently broadcast.</p>
+<h2 id="inference-batching">Inference batching</h2>
+<p>Running one pgmpy <code>VariableElimination.query()</code> per pixel is prohibitively slow for
+large rasters, so geobn never queries per pixel. Instead, inference proceeds in two
+steps: first <strong>measure</strong> how much distinct evidence the map actually contains, then
+<strong>choose</strong> the cheapest strategy for that amount.</p>
+<h3 id="step-1-group-pixels-by-observed-evidence-combination">Step 1 — group pixels by observed evidence combination</h3>
+<p>After discretization, every pixel is described by one state index per evidence node
+— e.g. <code>(slope=steep, rainfall=high)</code>. geobn groups all valid pixels by these
+combinations and counts how many <strong>distinct combinations actually occur on the map</strong>.</p>
+<p>This count is the key quantity, and it is usually far smaller than the number of
+<em>theoretically possible</em> combinations:</p>
+<ul>
+<li>It can never exceed the number of valid pixels.</li>
+<li>Geography is spatially correlated — neighbouring pixels tend to share the same
+  slope class, forest class, etc.</li>
+<li>Scalar inputs (<code>ConstantSource</code>, live weather values) contribute exactly one state
+  each, collapsing the combination count further.</li>
+</ul>
+<p>A network with millions of <em>possible</em> combinations may still produce only a few
+dozen <em>observed</em> ones, and geobn's strategy choice is driven entirely by the
+observed count — the size of the theoretical state space costs nothing by itself.</p>
+<h3 id="step-2-choose-a-strategy">Step 2 — choose a strategy</h3>
+<p><strong>Few observed combinations (≤ 200): per-combination queries.</strong> pgmpy
+<code>VariableElimination</code> queries run per observed combination. For a 500×500 grid with
+3 evidence nodes (3 states each) there are at most 27 combinations regardless of grid
+size — a handful of targeted queries is the cheapest possible approach.</p>
+<p>Within one combination, how the query nodes are requested depends on the size of
+their joint table (the product of their state counts). pgmpy computes the full joint
+over all requested nodes before splitting it into per-node marginals, so:</p>
+<ul>
+<li><strong>Small joint (≤ 20,000 cells):</strong> all query nodes in one pgmpy call, which shares
+  the elimination work (up to ~3× faster than separate calls).</li>
+<li><strong>Large joint:</strong> one pgmpy call per query node. The joint grows multiplicatively
+  with every query node — 19 query nodes with 2–5 states each is 192 million cells —
+  while separate calls grow linearly (10 s vs 32 ms per combination in that case).</li>
+</ul>
+<p><strong>Many observed combinations: one joint query.</strong> Asking thousands of nearly
+identical questions repeats the same internal propagation work each time. Instead,
+geobn asks pgmpy a single bigger question: the <strong>joint</strong> distribution
+P(query, e₁, …, eₖ) with no evidence at all. Normalising that array along the query
+axis converts it into the full conditional table P(query | e₁, …, eₖ) — the answer
+for <em>every</em> combination at once:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>P(query | e₁, …, eₖ) = P(query, e₁, …, eₖ) / P(e₁, …, eₖ)
+</code></pre></div>
+<p>Per-pixel results are then read from the table by numpy fancy indexing. This keeps
+networks with many evidence nodes tractable: 10 nodes × 3 states (59,049
+combinations) resolves in well under a second, where the per-combination loop would
+take minutes.</p>
+<p><strong>Safety valve:</strong> the joint table's size is the product of all evidence state counts
+× the query state count. If that exceeds an in-memory bound (~80 MB), the joint
+strategy is skipped and the per-combination loop is used — slower, but it only ever
+pays for combinations that actually occur.</p>
+<h3 id="summary-of-regimes">Summary of regimes</h3>
+<table>
+<thead>
+<tr>
+<th>Observed combos</th>
+<th>Table fits in memory?</th>
+<th>Strategy</th>
+<th>Cost</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>≤ 200</td>
+<td>(irrelevant)</td>
+<td>per-combination queries</td>
+<td>milliseconds</td>
+</tr>
+<tr>
+<td>many</td>
+<td>yes</td>
+<td>single joint query + table lookup</td>
+<td>~constant, sub-second</td>
+</tr>
+<tr>
+<td>many</td>
+<td>no</td>
+<td>per-combination queries</td>
+<td>proportional to observed combos</td>
+</tr>
+</tbody>
+</table>
+<p>In all cases the per-combination results are scattered back to the original pixel
+positions.</p>
+<p><strong>Impossible evidence.</strong> When an evidence combination has probability zero (e.g. an
+input observed in a state whose prior is 0), the posterior is undefined and <em>every</em>
+query node gets NaN, on every path. pgmpy on its own would still return numbers for
+query nodes it can prune away from the contradiction, so geobn checks P(evidence)
+explicitly: the product of the priors for root inputs, and the chain rule
+P(e₁)·P(e₂ | e₁)·… for any other evidence. <code>infer()</code> and <code>query_batch()</code> also emit a
+<code>UserWarning</code> naming the observed states with prior 0 and the number of affected
+pixels or points, since a zero prior on an input is often a modelling slip.</p>
+<h2 id="output">Output</h2>
+<p><a class="autorefs autorefs-internal" title="InferenceResult
+
+
+  
+      dataclass
+  " href="../api/result/#geobn.InferenceResult"><code>InferenceResult</code></a> holds:</p>
+<ul>
+<li><code>probabilities</code> — dict mapping each query node to a <code>(H, W, n_states)</code> float32 array</li>
+<li><code>state_names</code> — ordered state labels per query node</li>
+<li><code>crs</code>, <code>transform</code> — spatial metadata for the output grid</li>
+</ul>
+<p>From an <code>InferenceResult</code> you can:</p>
+<ul>
+<li><code>result.entropy("node")</code> — Shannon entropy map (bits), shape (H, W)</li>
+<li>summary maps: <code>expected_value</code>, <code>std</code>, <code>mode</code>, <code>mode_probability</code>, <code>exceedance</code>,
+  <code>ignorance</code>, <code>quantile</code> (see <a href="../api/result/#summary-layers">InferenceResult</a>)</li>
+<li><code>result.to_geotiff("out/", layers={...})</code> — write multi-band GeoTIFFs, plus optional extra layers</li>
+<li><code>result.to_xarray(layers={...})</code> — return an xarray Dataset</li>
+<li><code>result.show_map()</code> — interactive Leaflet map</li>
+</ul>
+<h2 id="real-time-repeated-inference">Real-time / repeated inference</h2>
+<p>When running inference repeatedly (e.g. updating weather forecasts while terrain stays
+fixed), geobn provides two optimisation tiers:</p>
+<p><strong>Tier 1 — <code>bn.freeze(*nodes)</code></strong>: marks nodes as static. The discrete index array
+is computed once on the first <code>infer()</code> call and cached for all subsequent calls.
+The pgmpy <code>VariableElimination</code> object is also cached.</p>
+<p><strong>Tier 2 — <code>bn.precompute(query)</code></strong>: solves all ∏ n_states combinations once (via a
+single joint query per query node) and stores a numpy lookup table. Subsequent
+<code>infer()</code> calls use O(H×W) fancy indexing — zero pgmpy queries per call. Best for
+real-time dashboards with a fixed BN structure.</p>
+<p>Call <code>bn.clear_cache()</code> to reset all caches if inputs change.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "toc.integrate", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
