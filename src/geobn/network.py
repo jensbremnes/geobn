@@ -7,10 +7,9 @@ import json
 import logging
 import warnings
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
-from pgmpy.models import DiscreteBayesianNetwork
 
 from .breakpoints import equal_interval, quantile
 from .discretize import DiscretizationSpec, discretize_array
@@ -24,6 +23,9 @@ from .inference import (
 )
 from .result import InferenceResult
 from .sources._base import DataSource
+
+if TYPE_CHECKING:
+    from pgmpy.models import DiscreteBayesianNetwork
 
 _log = logging.getLogger(__name__)
 
@@ -44,6 +46,22 @@ def _geobn_version() -> str:
         return version("geobn")
     except PackageNotFoundError:
         return "unknown"
+
+
+def _pgmpy_model_class() -> type:
+    """Import pgmpy's model class, which building or loading a network needs.
+
+    pgmpy is imported here rather than at module level, so ``import geobn``
+    and the parts of the library that do not touch a network work without it.
+    """
+    try:
+        from pgmpy.models import DiscreteBayesianNetwork  # noqa: PLC0415
+    except ImportError as exc:
+        raise ImportError(
+            "geobn needs pgmpy to build or load a Bayesian network: "
+            "pip install pgmpy"
+        ) from exc
+    return DiscreteBayesianNetwork
 
 
 def _model_hash(model: DiscreteBayesianNetwork) -> str:
@@ -129,7 +147,7 @@ class GeoBayesianNetwork:
             any pgmpy reader. Use :func:`load` to read a file by path instead.
             Unlike :func:`load`, this does not run ``check_model()``.
         """
-        if not isinstance(model, DiscreteBayesianNetwork):
+        if not isinstance(model, _pgmpy_model_class()):
             raise TypeError(
                 f"Expected DiscreteBayesianNetwork, got {type(model).__name__}"
             )
@@ -514,8 +532,9 @@ class GeoBayesianNetwork:
     def save_precomputed(self, path: str | Path) -> None:
         """Serialize the precomputed lookup table to a portable ``.npz`` file.
 
-        The file can be loaded on any machine with
-        :meth:`load_precomputed` — no pgmpy is required at load time.
+        The file can be loaded on any machine with :meth:`load_precomputed`.
+        Loading and the table lookups that follow run no inference queries,
+        but the network itself is a pgmpy model, so pgmpy must be installed.
 
         Parameters
         ----------
@@ -1314,7 +1333,10 @@ def load(path: str | Path) -> GeoBayesianNetwork:
         If the extension is not recognised, a ``.xml`` file's root element is
         not one of the three above, the file cannot be parsed, or the parsed
         model is not a valid discrete Bayesian network.
+    ImportError
+        If pgmpy is not installed.
     """
+    model_cls = _pgmpy_model_class()
     path = Path(path)
     if not path.is_file():
         raise FileNotFoundError(f"No such Bayesian network file: '{path}'")
@@ -1345,7 +1367,7 @@ def load(path: str | Path) -> GeoBayesianNetwork:
             f"Could not read '{path.name}' as {_FORMAT_NAMES[fmt]}: {exc}"
         ) from exc
 
-    if not isinstance(model, DiscreteBayesianNetwork):
+    if not isinstance(model, model_cls):
         raise ValueError(
             f"'{path.name}' describes a {type(model).__name__}, but geobn needs a "
             f"directed discrete Bayesian network. (UAI files may hold undirected "

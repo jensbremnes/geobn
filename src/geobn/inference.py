@@ -41,10 +41,13 @@ dict[node, (H, W, n_states) float32]         probability per pixel per state
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 import numpy as np
-from pgmpy.inference import VariableElimination
-from pgmpy.models import DiscreteBayesianNetwork
+
+if TYPE_CHECKING:
+    from pgmpy.inference import VariableElimination
+    from pgmpy.models import DiscreteBayesianNetwork
 
 _log = logging.getLogger(__name__)
 
@@ -125,6 +128,8 @@ def build_conditional_table(
         return None
 
     if ve is None:
+        from pgmpy.inference import VariableElimination  # noqa: PLC0415
+
         ve = VariableElimination(model)
 
     tables: dict[str, np.ndarray] = {}
@@ -364,6 +369,8 @@ def run_inference(
     )
 
     if ve is None:
+        from pgmpy.inference import VariableElimination  # noqa: PLC0415
+
         ve = VariableElimination(model)
 
     # For each query node, one probability distribution per unique evidence
