@@ -11,7 +11,7 @@ Bayesian network inference over geospatial data.
 
 `geobn` lets you turn heterogeneous data sources (offline and real-time) into insight over geographical areas by using techniques in probabilistic AI. The library is domain-agnostic, and may be used for, e.g., environmental risk assessment and risk‑informed route planning.
 
-This is achieved by wiring different data sources — rasters, remote APIs, or plain scalars — directly into a Bayesian network, and run pixel-wise inference, producing posterior probability maps and entropy rasters. Under the hood it groups pixels by unique evidence combinations and, for large networks, solves *all* combinations with a single joint query — so inference stays fast even with many evidence nodes over millions of pixels. Static sources can be disk-cached to avoid redundant network fetches, and `bn.precompute()` can pre-solve all evidence combinations into a lookup table, reducing repeated inference calls to pure array indexing. The table can be saved with `bn.save_precomputed()` and loaded on any machine with `bn.load_precomputed()` — no pgmpy required at runtime.
+This is achieved by wiring different data sources — rasters, remote APIs, or plain scalars — directly into a Bayesian network, and run pixel-wise inference, producing posterior probability maps and entropy rasters. Under the hood it groups pixels by unique evidence combinations and, for large networks, solves *all* combinations with a single joint query — so inference stays fast even with many evidence nodes over millions of pixels. Static sources can be disk-cached to avoid redundant network fetches, and `bn.precompute()` can pre-solve all evidence combinations into a lookup table, reducing repeated inference calls to pure array indexing. The table can be saved with `bn.save_precomputed()` and loaded on any machine with `bn.load_precomputed()`, after which `bn.infer()` runs no inference queries.
 
 Full docs (API reference, concepts, examples) are hosted at:
 **https://jensbremnes.github.io/geobn**
@@ -263,7 +263,7 @@ bn.precompute(query=["avalanche_risk"])  # one-time cost: one joint query covers
 result = bn.infer(query=["avalanche_risk"])  # O(H×W) array indexing — no pgmpy at runtime
 ```
 
-To persist the table for offline deployment, save it after `precompute()` and load it on the target machine — no pgmpy inference runs at load or infer time:
+To persist the table for offline deployment, save it after `precompute()` and load it on the target machine. No inference queries run at load or infer time. pgmpy must still be installed on that machine, because the network the table is checked against is a pgmpy model:
 
 ```python
 # Workstation: build and save
@@ -272,7 +272,7 @@ bn.save_precomputed("avalanche_table.npz")
 
 # Robot / edge device: load and infer
 bn.load_precomputed("avalanche_table.npz")
-result = bn.infer(query=["avalanche_risk"])  # pure numpy, no pgmpy
+result = bn.infer(query=["avalanche_risk"])  # pure numpy, no inference queries
 ```
 
 ---

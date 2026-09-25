@@ -330,4 +330,10 @@ single joint query per query node) and stores a numpy lookup table. Subsequent
 `infer()` calls use O(H×W) fancy indexing — zero pgmpy queries per call. Best for
 real-time dashboards with a fixed BN structure.
 
+pgmpy is imported only when a network is built or loaded, and when inference runs
+through it. `import geobn` and the parts of the library that do not touch a network
+(sources, grids, discretization, breakpoint helpers, `InferenceResult`) do not import
+it. A `GeoBayesianNetwork` wraps a pgmpy model, so using a saved table still requires
+pgmpy to be installed.
+
 Call `bn.clear_cache()` to reset all caches if inputs change.

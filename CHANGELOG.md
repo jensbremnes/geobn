@@ -29,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `PointGridSource(name=..., cache_dir=..., cache_ttl=...)` caches its sampled lattice on disk; on a hit the callable is not called at all, which for the default 5×5 lattice is 25 API calls saved. `name` identifies the cache entry, because a callable cannot identify itself — two sources built by the same factory are indistinguishable and would share one entry. Passing `cache_dir` without `name` raises `ValueError`.
 
 ### Changed
+- `import geobn` no longer imports pgmpy. It is imported when a network is built (`GeoBayesianNetwork(model)`) or loaded (`geobn.load()`), and when inference runs through it, so sources, grids, discretization, the breakpoint helpers and `InferenceResult` can be used without it. Building or loading a network without pgmpy raises `ImportError` with an install hint. pgmpy remains a required dependency.
+- The README said a saved table could be used with "no pgmpy required at runtime". Loading a table and inferring from it run no inference queries, but the network is a pgmpy model, so pgmpy must be installed; the README and the `save_precomputed()` docstring say so.
 - `geobn.load()` now validates the parsed model with pgmpy's `check_model()` and raises `ValueError` naming the file. A malformed or truncated file, or a CPT whose columns do not sum to 1, now fails at load time instead of deep inside `infer()`. An unreadable file and an unknown extension also raise `ValueError`, and a missing file raises `FileNotFoundError`, instead of surfacing a raw pgmpy or parser error.
 
 ### Fixed
