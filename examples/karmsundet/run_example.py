@@ -23,7 +23,8 @@ Data sources
 ------------
 water_depth (WCSSource)
     EMODnet Bathymetry WCS — free, global, ~115 m resolution.
-    Negative values = below sea level; flipped to positive depth below surface.
+    Negative values = below sea level; a DerivedSource flips them to positive
+    depth below surface.
     URL: https://ows.emodnet-bathymetry.eu/wcs
 
 vessel_traffic (MosaicSource over RasterSource and ConstantSource)
@@ -177,6 +178,11 @@ def _make_loc_fn(variable_name: str, variant: str = "compact"):
     return _fn
 
 
+def depth_below_surface(elevation: np.ndarray) -> np.ndarray:
+    """Positive depth below the sea surface from EMODnet elevation; land → NaN."""
+    return np.where(elevation <= 0, -elevation, np.nan)
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -195,31 +201,29 @@ def main() -> None:
     bn = geobn.load(HERE / "usv_risk.bif")
     bn.set_grid(CRS, RESOLUTION, (WEST, SOUTH, EAST, NORTH))
 
-    # ── 2. Fetch EMODnet bathymetry ────────────────────────────────────────
+    # ── 2. EMODnet bathymetry as water depth ──────────────────────────────
+    # EMODnet convention: negative = below sea level, positive = land/above.
+    # depth_below_surface turns that into positive depth, with land as NaN.
+    water_depth = geobn.DerivedSource(depth_below_surface, geobn.WCSSource(
+        url="https://ows.emodnet-bathymetry.eu/wcs",
+        layer="emodnet:mean",
+        version="2.0.1",
+        valid_range=(-1000.0, 100.0),
+        cache_dir=CACHE_DIR,
+    ))
+
     print("\nFetching EMODnet bathymetry (cached after first run) ...")
-    _EMODNET_URL = "https://ows.emodnet-bathymetry.eu/wcs"
     try:
-        raw_depth = bn.fetch_raw(geobn.WCSSource(
-            url=_EMODNET_URL,
-            layer="emodnet:mean",
-            version="2.0.1",
-            valid_range=(-1000.0, 100.0),
-            cache_dir=CACHE_DIR,
-        ))
+        depth = bn.fetch_raw(water_depth)
     except Exception as exc:
         sys.exit(f"ERROR fetching bathymetry: {exc}")
-
-    # EMODnet convention: negative = below sea level, positive = land/above.
-    # Convert to positive depth below surface; land pixels → NaN.
-    depth = -raw_depth
-    depth[depth < 0] = np.nan   # land pixels (originally positive in EMODnet)
 
     water_pixels = int(np.isfinite(depth).sum())
     print(f"Bathymetry  : {water_pixels:,} water pixels "
           f"(depth range {np.nanmin(depth):.0f}–{np.nanmax(depth):.0f} m)")
 
     # ── 3. Wire inputs ─────────────────────────────────────────────────────
-    bn.set_input("water_depth", geobn.ArraySource(depth))
+    bn.set_input("water_depth", water_depth)
 
     # AIS traffic density — the pre-computed GeoTIFF where it has data, a
     # medium-traffic prior everywhere else.

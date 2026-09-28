@@ -1,12 +1,13 @@
 """geobn — Bayesian network inference over geographic space."""
 import logging as _logging
 
-from . import breakpoints
+from . import breakpoints, terrain
 from .network import GeoBayesianNetwork, load
 from .result import InferenceResult
 from .sources import (
     ArraySource,
     ConstantSource,
+    DerivedSource,
     MosaicSource,
     PointGridSource,
     RasterSource,
@@ -43,12 +44,14 @@ def set_verbose(enabled: bool = True) -> None:
 
 __all__ = [
     "breakpoints",
+    "terrain",
     "load",
     "set_verbose",
     "GeoBayesianNetwork",
     "InferenceResult",
     "ArraySource",
     "ConstantSource",
+    "DerivedSource",
     "MosaicSource",
     "PointGridSource",
     "RasterSource",

@@ -8,7 +8,7 @@ using a free WCS endpoint. No credentials are required.
 ## What it demonstrates
 
 - Fetching a real 10 m Digital Terrain Model from Kartverket's WCS
-- Deriving slope angle and aspect analytically from the DEM
+- Deriving slope angle and aspect from the DEM with `geobn.terrain` and `DerivedSource`
 - Using `ConstantSource` for spatially-uniform weather inputs
 - Encoding domain knowledge (terrain + weather) in a 2-level BN
 - Exploring different weather scenarios by changing two scalar constants
@@ -31,8 +31,8 @@ Four root nodes (evidence inputs), two intermediate nodes, one query node
 
 | Node | Source | Notes |
 |------|--------|-------|
-| `slope_angle` | `WCSSource` (Kartverket DTM) → numpy.gradient | degrees (0–90°) |
-| `sun_exposure` | `WCSSource` (Kartverket DTM) → numpy.gradient | aspect quadrant (0=N, 1=E, 2=W, 3=S) |
+| `slope_angle` | `terrain.slope` of the Kartverket DTM (`WCSSource`) | degrees (0–90°) |
+| `sun_exposure` | `terrain.aspect` of the DTM, classified by a `DerivedSource` | aspect quadrant (0=N, 1=E, 2=W, 3=S) |
 | `recent_snow` | `ConstantSource` | cm; edit `RECENT_SNOW_CM` to change scenario |
 | `temperature` | `ConstantSource` | °C; edit `AIR_TEMP_C` to change scenario |
 
@@ -51,54 +51,60 @@ transform = Affine(RESOLUTION, 0, WEST, 0, -RESOLUTION, NORTH)
 ref_grid = GridSpec(crs=CRS, transform=transform, shape=(H, W))
 ```
 
-### 2. Fetch the DTM
+### 2. Describe the DTM and the terrain inputs
 
 ```python
-dem = bn.fetch_raw(geobn.WCSSource(
+def mask_sea(dem):
+    return np.where(dem > 0, dem, np.nan)   # Kartverket returns 0 for sea
+
+dem = geobn.DerivedSource(mask_sea, geobn.WCSSource(
     url="https://hoydedata.no/arcgis/services/las_dtm_somlos/ImageServer/WCSServer",
     layer="las_dtm",
     version="1.0.0",
+    format="GeoTIFF",
     valid_range=(-500.0, 9000.0),
     cache_dir=CACHE_DIR,
-))  # (80, 240) float32, NaN at sea
+))
+slope = geobn.terrain.slope(dem)
+sun_exposure = geobn.DerivedSource(aspect_quadrant, geobn.terrain.aspect(dem))
+forest_cover = geobn.DerivedSource(treeline_forest_cover, dem)
 ```
 
-The terrain is cached after the first run. On subsequent runs it loads from
-`examples/lyngen_alps/cache/` without making a network request.
+Nothing is fetched yet. The DTM is downloaded when the first of these inputs is needed,
+and cached in `examples/lyngen_alps/cache/`, so later fetches and later runs read it from
+disk.
 
-### 3. Derive slope and aspect
+`geobn.terrain.slope` and `geobn.terrain.aspect` measure the distance between pixel
+centres on the ellipsoid, so a 0.005° pixel at 70°N counts as about 190 m east–west and
+556 m north–south. Next to sea they use one-sided differences, so the coast does not show
+up as a cliff. Aspect is the direction the slope faces, in degrees from north.
 
-```python
-slope_deg, sun_exposure = compute_slope_aspect(dem)
-# slope_deg:    float32 (H, W), range 0–90°
-# sun_exposure: float32 (H, W), direction the slope faces: 0=N, 1=E, 2=W, 3=S
-```
+The BN's `sun_exposure` node has four quadrant states. The north quadrant wraps around 0°,
+which breakpoints cannot express, so `aspect_quadrant` turns the aspect into codes
+0 = N, 1 = E, 2 = W, 3 = S first.
 
-The pixel-metre conversion accounts for the geographic CRS:
-
-```python
-m_per_deg_lat = 111_320.0
-m_per_deg_lon = 111_320.0 * np.cos(np.radians(lat_mid))
-dz_drow = _nan_gradient(dem, pixel_lat_m, axis=0)
-dz_dcol = _nan_gradient(dem, pixel_lon_m, axis=1)
-```
-
-`_nan_gradient` uses central differences like `np.gradient`, but falls back to a
-one-sided difference next to sea or nodata instead of treating those pixels as
-0 m, which would create fake cliffs along the coast.  Aspect is the direction of
-steepest *descent*, i.e. the way the slope faces.
-
-### 4. Load the BN and wire inputs
+### 3. Load the BN and wire inputs
 
 ```python
 bn = geobn.load("avalanche_risk.bif")
 bn.set_grid(CRS, RESOLUTION, (WEST, SOUTH, EAST, NORTH))
 
-bn.set_input("slope_angle",  geobn.ArraySource(slope_deg))
-bn.set_input("sun_exposure", geobn.ArraySource(sun_exposure))
-bn.set_input("recent_snow", geobn.ConstantSource(RECENT_SNOW_CM))
+bn.set_input("slope_angle",  slope)
+bn.set_input("sun_exposure", sun_exposure)
+bn.set_input("forest_cover", forest_cover)
+bn.set_input("recent_snow",  geobn.ConstantSource(RECENT_SNOW_CM))
 bn.set_input("temperature",  geobn.ConstantSource(AIR_TEMP_C))
+bn.set_input("wind_load",    geobn.ConstantSource(WIND_SPEED_MS))
 ```
+
+### 4. Read the terrain arrays for the summary
+
+```python
+slope_deg = bn.fetch_raw(slope)   # (80, 240) float32, NaN at sea
+```
+
+`fetch_raw()` returns the values of any source on the grid. The script uses it for the
+console summary and for the slope, exposure and forest layers on the map.
 
 ### 5. Configure discretization
 

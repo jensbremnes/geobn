@@ -26,6 +26,7 @@ calls `_fetch()` and applies `valid_range`. A source becomes cacheable by also i
 | [`WCSSource`](wcs.md) | Generic OGC WCS endpoint |
 | [`PointGridSource`](core.md) | Sample any callable over an N×N lat/lon grid |
 | [`MosaicSource`](core.md) | Combine several sources, best source first |
+| [`DerivedSource`](core.md) | Compute a layer from other sources |
 
 ## Grid-aware vs self-contained sources
 
@@ -44,6 +45,9 @@ Grid-aware sources are: `WCSSource`, `PointGridSource`.
 can compare them pixel by pixel, but as long as one of them is self-contained the mosaic
 reports that source when asked without a grid, so an automatic grid can still be derived
 from it.
+
+`DerivedSource` works the same way: it aligns its inputs to the grid before calling its
+function, and reports its first self-contained input when asked without a grid.
 
 ## Masking sentinel values with `valid_range`
 

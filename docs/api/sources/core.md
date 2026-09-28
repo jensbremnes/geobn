@@ -20,12 +20,14 @@ source = geobn.ArraySource(slope, crs="EPSG:4326", transform=transform)
 **Example — pre-aligned array (no CRS needed):**
 
 ```python
-# After fetching a DEM and computing slope analytically, the result
-# is already on the BN grid — pass it directly without CRS metadata.
-dem = bn.fetch_raw(geobn.WCSSource(...))
-slope_deg = compute_slope(dem)   # same shape as the BN grid
-bn.set_input("slope_angle", geobn.ArraySource(slope_deg))
+# An array computed on the BN grid elsewhere, with the grid's shape,
+# needs no CRS metadata.
+snow_depth = my_snow_model(bn.fetch_raw(geobn.RasterSource("dem.tif")))
+bn.set_input("snow_depth", geobn.ArraySource(snow_depth))
 ```
+
+To compute an input from another source, a `DerivedSource` is usually the better fit:
+it keeps the input lazy, so it is fetched only when needed and can be frozen.
 
 ---
 
@@ -239,3 +241,51 @@ the source below it.
 A `valid_range` on the mosaic applies to the merged values, after a pixel has been taken
 from a source. A `valid_range` on one of the sources applies before the merge, and
 therefore lets the next source fill in the pixels it masks.
+
+---
+
+## DerivedSource
+
+::: geobn.DerivedSource
+    options:
+      show_root_heading: true
+
+**Example — elevation to depth:**
+
+```python
+def depth_below_surface(elevation):
+    return np.where(elevation <= 0, -elevation, np.nan)   # land → NaN
+
+depth = geobn.DerivedSource(
+    depth_below_surface,
+    geobn.WCSSource(url=EMODNET_WCS, layer="emodnet:mean", cache_dir="cache/"),
+)
+bn.set_input("water_depth", depth)
+```
+
+**Example — combining two sources:**
+
+```python
+# Snow load from depth (m) and density (kg/m³); both are aligned to the grid first.
+load = geobn.DerivedSource(
+    lambda depth, density: depth * density * 9.81 / 1000,   # kPa
+    geobn.RasterSource("snow_depth.tif"),
+    geobn.URLSource("https://example.com/snow_density.tif"),
+)
+bn.set_input("snow_load", load)
+```
+
+**Example — building on a terrain helper:**
+
+```python
+def facing_north(aspect_deg):
+    return np.where(np.isnan(aspect_deg), np.nan, np.cos(np.radians(aspect_deg)))
+
+bn.set_input("northness", geobn.DerivedSource(facing_north, geobn.terrain.aspect(dem)))
+```
+
+The function receives float32 arrays with NaN for missing data and must return an array
+of the grid's shape. The inputs are resampled with their own `resampling` method. A derived
+source keeps no disk cache of its own, so give remote inputs a `cache_dir`; the function
+runs again on every fetch, and `bn.freeze()` keeps its discretised result between
+`infer()` calls.
