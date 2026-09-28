@@ -16,9 +16,12 @@ from .breakpoints import equal_interval, quantile
 from .discretize import DiscretizationSpec, discretize_array
 from .grid import GridSpec, _pixel_size_m, align_to_grid
 from .inference import (
+    BlankedBy,
     _query_marginals,
     _root_priors,
+    blank_masks,
     build_conditional_table,
+    make_blanked_by,
     run_inference,
     run_inference_from_table,
 )
@@ -148,6 +151,9 @@ class GeoBayesianNetwork:
         self._inference_table: dict[str, np.ndarray] = {}
         self._evidence_nodes: list[str] = []
         self._query_nodes: list[str] = []
+        # Which query nodes a set of missing inputs makes NaN, per
+        # (input order, query).  Depends only on the model's structure.
+        self._blanked_by_cache: dict[tuple[tuple[str, ...], tuple[str, ...]], BlankedBy] = {}
 
     # ------------------------------------------------------------------
     # Configuration
@@ -213,8 +219,8 @@ class GeoBayesianNetwork:
             What to do with values outside ``[breakpoints[0], breakpoints[-1]]``:
 
             - ``"clip"`` (default): assign them to the first or last state.
-            - ``"nan"``: treat them as NoData, so the pixel (or point) gets
-              NaN probabilities.
+            - ``"nan"``: treat them as NoData, so query nodes that depend on
+              this input get NaN probabilities at that pixel (or point).
         """
         self._validate_node_exists(node)
         if labels is None:
@@ -757,7 +763,8 @@ class GeoBayesianNetwork:
             One value per input node (every node passed to :meth:`set_input`).
             Values may be state names (``"steep"``) or numbers, which are
             discretized with the node's :meth:`set_discretization` spec.
-            A NaN value gives NaN probabilities, as in :meth:`infer`.
+            A NaN value gives NaN probabilities for the query nodes that
+            depend on that input, as in :meth:`infer`.
         query:
             Query nodes to return.  Defaults to the nodes passed to
             :meth:`precompute`; must be a subset of them.
@@ -812,8 +819,9 @@ class GeoBayesianNetwork:
             One entry per input node.  An entry is either a sequence of K
             values (list, tuple or array) or a single value that applies to
             all K points.  Values may be numbers (discretized with the node's
-            spec) or state names, but not both in one sequence.  NaN values
-            give a NaN row for that point.
+            spec) or state names, but not both in one sequence.  A NaN value
+            gives a NaN row for that point in the query nodes that depend on
+            that input.
         query:
             Query nodes to return.  Defaults to the nodes passed to
             :meth:`precompute`; must be a subset of them.
@@ -848,23 +856,22 @@ class GeoBayesianNetwork:
             raise ValueError(f"Evidence sequences have mismatched lengths: {sorted(lengths)}")
         k = lengths.pop() if lengths else 1
 
-        index_arrays: list[np.ndarray] = []
-        invalid = np.zeros(k, dtype=bool)
-        for node in self._evidence_nodes:
-            idx = np.broadcast_to(self._evidence_state_indices(node, values[node]), (k,))
-            invalid |= idx < 0
-            index_arrays.append(np.clip(idx, 0, None))
-
-        out: dict[str, np.ndarray] = {}
-        for qnode in query:
-            probs = self._inference_table[qnode][tuple(index_arrays)].astype(np.float32)
-            probs[invalid] = np.nan
-            out[qnode] = probs
-        if query:
-            impossible = ~invalid & np.isnan(out[query[0]]).all(axis=-1)
-            self._warn_impossible_evidence(
-                dict(zip(self._evidence_nodes, index_arrays)), impossible, "point(s)"
-            )
+        state_indices = {
+            node: np.broadcast_to(self._evidence_state_indices(node, values[node]), (k,))
+            for node in self._evidence_nodes
+        }
+        blanked_by = self._blanked_by(self._evidence_nodes, query)
+        out = run_inference_from_table(
+            table={q: self._inference_table[q] for q in query},
+            node_order=self._evidence_nodes,
+            evidence_state_grids=state_indices,
+            blanked_by=blanked_by,
+        )
+        self._warn_impossible_evidence(
+            state_indices,
+            self._impossible_mask(state_indices, query, out, blanked_by),
+            "point(s)",
+        )
         return out
 
     @staticmethod
@@ -959,6 +966,10 @@ class GeoBayesianNetwork:
 
         Notes
         -----
+        Where an input has no data, a query node is NaN only if that input is
+        d-connected to it given the inputs that do have data.  Query nodes the
+        missing input cannot affect get their posterior from the other inputs.
+
         If :meth:`precompute` has been called with the same *query*, this
         method uses numpy fancy indexing instead of pgmpy queries.  If
         :meth:`freeze` has been called, cached discrete arrays are reused for
@@ -1070,6 +1081,7 @@ class GeoBayesianNetwork:
             query_state_names[node] = list(cpd.state_names[node])
 
         # ── 5. Run inference ───────────────────────────────────────────
+        blanked_by = self._blanked_by(list(evidence_state_grids), query)
         if (
             self._inference_table
             and sorted(query) == sorted(self._query_nodes)
@@ -1081,7 +1093,7 @@ class GeoBayesianNetwork:
                 table=self._inference_table,
                 node_order=self._evidence_nodes,
                 evidence_state_grids=evidence_state_grids,
-                nodata_mask=nodata_mask,
+                blanked_by=blanked_by,
             )
         else:
             # Normal path (Tier-1 or uncached): pgmpy VE with cached engine
@@ -1096,17 +1108,19 @@ class GeoBayesianNetwork:
                 evidence_state_names=evidence_state_names,
                 query_nodes=query,
                 query_state_names=query_state_names,
-                nodata_mask=nodata_mask,
                 ve=self._cached_ve,
             )
 
-        impossible = ~nodata_mask & np.isnan(probabilities[query[0]]).all(axis=-1)
-        self._warn_impossible_evidence(evidence_state_grids, impossible, "pixel(s)")
+        self._warn_impossible_evidence(
+            evidence_state_grids,
+            self._impossible_mask(evidence_state_grids, query, probabilities, blanked_by),
+            "pixel(s)",
+        )
 
-        n_valid = int((~nodata_mask).sum())
+        n_complete = int((~nodata_mask).sum())
         _log.info(
-            "Inference complete: %d×%d pixels, %d valid",
-            ref_grid.shape[0], ref_grid.shape[1], n_valid,
+            "Inference complete: %d×%d pixels, %d with every input",
+            ref_grid.shape[0], ref_grid.shape[1], n_complete,
         )
 
         return InferenceResult(
@@ -1116,17 +1130,41 @@ class GeoBayesianNetwork:
             transform=ref_grid.transform,
         )
 
+    def _blanked_by(self, node_order: list[str], query: list[str]) -> BlankedBy:
+        """Cached :func:`make_blanked_by` for this input order and query."""
+        key = (tuple(node_order), tuple(query))
+        if key not in self._blanked_by_cache:
+            self._blanked_by_cache[key] = make_blanked_by(self._model, node_order, query)
+        return self._blanked_by_cache[key]
+
+    @staticmethod
+    def _impossible_mask(
+        state_indices: dict[str, np.ndarray],
+        query: list[str],
+        probabilities: dict[str, np.ndarray],
+        blanked_by: BlankedBy,
+    ) -> np.ndarray:
+        """Pixels/points where a query node is NaN although no input it depends on is missing."""
+        shape = np.shape(next(iter(state_indices.values())))
+        impossible = np.zeros(shape, dtype=bool)
+        if not query:
+            return impossible
+        blanked = blank_masks(state_indices, list(state_indices), query, blanked_by)
+        for q in dict.fromkeys(query):
+            impossible |= ~blanked[q] & np.isnan(probabilities[q]).all(axis=-1)
+        return impossible
+
     def _warn_impossible_evidence(
         self,
         state_indices: dict[str, np.ndarray],
         impossible: np.ndarray,
         unit: str,
     ) -> None:
-        """Warn when valid pixels/points got NaN because P(evidence) == 0.
+        """Warn when pixels/points got NaN because P(evidence) == 0.
 
         *state_indices* maps each input node to its state indices (BN state
-        order) with the same shape as *impossible*.  The message names the
-        observed states whose prior is zero, the usual cause.
+        order, -1 for NoData) with the same shape as *impossible*.  The message
+        names the observed states whose prior is zero, the usual cause.
         """
         n_impossible = int(impossible.sum())
         if n_impossible == 0:
@@ -1138,7 +1176,8 @@ class GeoBayesianNetwork:
             prior = self._model.get_cpds(node).get_values()[:, 0]
             states = self._bn_state_names(node)
             observed = np.unique(np.asarray(indices)[impossible])
-            causes += [f"{node}='{states[i]}'" for i in observed if prior[i] == 0]
+            observed = observed[observed >= 0]
+            causes +=[f"{node}='{states[i]}'" for i in observed if prior[i] == 0]
         reason = (
             f"the model gives {', '.join(causes)} a prior probability of 0"
             if causes

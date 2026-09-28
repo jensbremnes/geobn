@@ -21,7 +21,7 @@ class InferenceResult:
     ----------
     probabilities:
         Mapping from query node name to a (H, W, n_states) float32 array.
-        NaN where any input was NoData.
+        NaN where an input the node depends on was NoData.
     state_names:
         Mapping from query node name to its ordered list of state labels.
     crs:

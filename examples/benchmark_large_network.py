@@ -65,7 +65,6 @@ def time_run_inference(model, evidence, n_states, H, W, force_loop):
         evidence_state_names={e: [f"s{k}" for k in range(n_states)] for e in evidence},
         query_nodes=["risk"],
         query_state_names={"risk": [f"s{k}" for k in range(n_states)]},
-        nodata_mask=np.zeros((H, W), dtype=bool),
     )
     matrix = np.column_stack([grids[e].ravel() for e in evidence])
     n_unique = len(np.unique(matrix, axis=0))

@@ -40,6 +40,14 @@
     options:
       show_root_heading: true
 
+::: geobn.inference.make_blanked_by
+    options:
+      show_root_heading: true
+
+::: geobn.inference.blank_masks
+    options:
+      show_root_heading: true
+
 ::: geobn.inference.shannon_entropy
     options:
       show_root_heading: true

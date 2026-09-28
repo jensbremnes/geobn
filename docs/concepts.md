@@ -251,16 +251,34 @@ thresholds.
 
 ## NaN / NoData propagation
 
-NaN values propagate strictly: if **any** input pixel is NaN, that pixel is excluded
-from inference and all output bands for that pixel are NaN.
+An input that is NaN at a pixel has no state there. A query node is NaN at that pixel
+if the missing input can affect it, that is, if the input is d-connected to the query
+node given the inputs that do have data at the pixel. Query nodes the missing input
+cannot affect are computed from the other inputs, and their posterior is the same as
+if the input had been observed.
 
-This means:
-- Pixels outside WCS coverage → NaN inputs → NaN outputs
-- Sea pixels in a land DEM → NaN depth → NaN output
-- Invalid sensor readings → NaN evidence → NaN posteriors
-- Values outside the breakpoint range with `out_of_range="nan"` → NaN posteriors
-- File nodata → NaN: `RasterSource`, `URLSource` and `WCSSource` automatically convert
+Take a network with `slope → avalanche_risk` and `water_depth → grounding_risk`. Where
+`water_depth` is NaN, `grounding_risk` is NaN and `avalanche_risk` is computed from
+`slope` as usual. Where an input feeds both query nodes, both are NaN.
+
+Whether a missing input can affect a query node depends on which other inputs are
+observed. In `X → M → Q` with `M` observed, a missing `X` leaves `Q` unaffected; with
+`M` missing too, `Q` is NaN. The check reads the network's structure only, so an input
+whose effect happens to cancel out in the conditional probability tables still counts
+as able to affect the query node. A missing input is never replaced by its prior;
+the query nodes it can affect are NaN.
+
+NaN inputs come from:
+- Pixels outside WCS coverage
+- Sea pixels in a land DEM
+- Invalid sensor readings
+- Values outside the breakpoint range with `out_of_range="nan"`
+- File nodata: `RasterSource`, `URLSource` and `WCSSource` automatically convert
   pixels matching the GeoTIFF's declared nodata value (or its internal mask) to NaN
+
+If the observed inputs at a pixel have probability zero under the model, every query
+node that is not already NaN because of a missing input is NaN too, with a
+`UserWarning` (see below).
 
 An `ArraySource` without `crs`/`transform` must either match the grid shape exactly
 (pre-aligned) or be a single value; any other shape raises `ValueError` rather than
@@ -340,6 +358,11 @@ pays for combinations that actually occur.
 
 In all cases the per-combination results are scattered back to the original pixel
 positions.
+
+Pixels with NaN inputs are grouped by which inputs are missing, and each group goes
+through the same steps with its observed inputs as the evidence. With a precomputed
+table, a query node the missing inputs cannot affect has the same posterior in every
+table row over their states, so geobn reads it from the first row that is defined.
 
 **Impossible evidence.** When an evidence combination has probability zero (e.g. an
 input observed in a state whose prior is 0), the posterior is undefined and *every*

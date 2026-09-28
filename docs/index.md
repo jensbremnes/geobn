@@ -32,7 +32,7 @@ result.to_geotiff("out/")  # multi-band GeoTIFF per query node
 
 - **No special GIS knowledge required** — wire any Python data source to a BN node.
 - **Pure-Python reprojection** — numpy + pyproj only; no rasterio needed for grid alignment.
-- **NaN-aware** — NoData pixels are excluded from inference and stay NaN in outputs.
+- **NaN-aware** — a NoData input makes a pixel NaN only in the query nodes it can affect.
 - **Efficient batching** — pixels are grouped by unique evidence combination, and
   large state spaces are solved with a single joint query instead of one query per
   combination — scales to networks with many evidence nodes.

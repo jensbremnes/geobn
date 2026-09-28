@@ -20,15 +20,12 @@ class TestRunInference:
             "slope": ["flat", "moderate", "steep"],
             "rainfall": ["low", "medium", "high"],
         }
-        nodata_mask = np.zeros((H, W), dtype=bool)
-
         result = run_inference(
             model=fire_risk_model,
             evidence_state_grids=evidence_state_grids,
             evidence_state_names=evidence_state_names,
             query_nodes=["fire_risk"],
             query_state_names={"fire_risk": ["low", "medium", "high"]},
-            nodata_mask=nodata_mask,
         )
 
         probs = result["fire_risk"]
@@ -44,8 +41,7 @@ class TestRunInference:
             "slope": np.zeros((H, W), dtype=np.int16),
             "rainfall": np.zeros((H, W), dtype=np.int16),
         }
-        nodata_mask = np.zeros((H, W), dtype=bool)
-        nodata_mask[1, 1] = True  # one NoData pixel
+        evidence_state_grids["slope"][1, 1] = -1  # one NoData pixel
 
         result = run_inference(
             model=fire_risk_model,
@@ -56,7 +52,6 @@ class TestRunInference:
             },
             query_nodes=["fire_risk"],
             query_state_names={"fire_risk": ["low", "medium", "high"]},
-            nodata_mask=nodata_mask,
         )
 
         probs = result["fire_risk"]
@@ -70,7 +65,6 @@ class TestRunInference:
             "slope": np.zeros((H, W), dtype=np.int16),
             "rainfall": np.zeros((H, W), dtype=np.int16),
         }
-        nodata_mask = np.zeros((H, W), dtype=bool)
         result = run_inference(
             model=fire_risk_model,
             evidence_state_grids=evidence_state_grids,
@@ -80,7 +74,6 @@ class TestRunInference:
             },
             query_nodes=["fire_risk"],
             query_state_names={"fire_risk": ["low", "medium", "high"]},
-            nodata_mask=nodata_mask,
         )
         probs = result["fire_risk"]
         assert probs.shape == (1, 1, 3)
@@ -90,10 +83,9 @@ class TestRunInference:
     def test_all_nodata_returns_nan_array(self, fire_risk_model):
         H, W = 2, 2
         evidence_state_grids = {
-            "slope": np.zeros((H, W), dtype=np.int16),
+            "slope": np.full((H, W), -1, dtype=np.int16),
             "rainfall": np.zeros((H, W), dtype=np.int16),
         }
-        nodata_mask = np.ones((H, W), dtype=bool)
 
         result = run_inference(
             model=fire_risk_model,
@@ -104,7 +96,6 @@ class TestRunInference:
             },
             query_nodes=["fire_risk"],
             query_state_names={"fire_risk": ["low", "medium", "high"]},
-            nodata_mask=nodata_mask,
         )
         assert np.all(np.isnan(result["fire_risk"]))
 
@@ -115,7 +106,6 @@ class TestRunInference:
             "slope": np.full((H, W), 2, dtype=np.int16),    # all "steep"
             "rainfall": np.full((H, W), 2, dtype=np.int16),  # all "high"
         }
-        nodata_mask = np.zeros((H, W), dtype=bool)
         result = run_inference(
             model=fire_risk_model,
             evidence_state_grids=evidence_state_grids,
@@ -125,7 +115,6 @@ class TestRunInference:
             },
             query_nodes=["fire_risk"],
             query_state_names={"fire_risk": ["low", "medium", "high"]},
-            nodata_mask=nodata_mask,
         )
         probs = result["fire_risk"]
         # All pixels should have identical probabilities
@@ -186,8 +175,6 @@ class TestStrategyEquivalence:
             "slope": rng.integers(0, 3, (H, W)).astype(np.int16),
             "rainfall": rng.integers(0, 3, (H, W)).astype(np.int16),
         }
-        nodata_mask = np.zeros((H, W), dtype=bool)
-        nodata_mask[0, 0] = True
         evidence_state_grids["slope"][0, 0] = -1
         return dict(
             model=model,
@@ -198,7 +185,6 @@ class TestStrategyEquivalence:
             },
             query_nodes=["fire_risk"],
             query_state_names={"fire_risk": ["low", "medium", "high"]},
-            nodata_mask=nodata_mask,
         )
 
     def test_joint_path_matches_loop_path(self, fire_risk_model, monkeypatch):
@@ -225,7 +211,7 @@ class TestStrategyEquivalence:
         result = run_inference(**kwargs)
         probs = result["fire_risk"]
         assert np.all(np.isnan(probs[0, 0, :]))
-        valid = ~kwargs["nodata_mask"]
+        valid = kwargs["evidence_state_grids"]["slope"] >= 0
         np.testing.assert_allclose(probs[valid].sum(axis=-1), 1.0, atol=1e-5)
 
     def test_multiple_query_nodes_shared_elimination(self, fire_risk_model):
@@ -240,7 +226,6 @@ class TestStrategyEquivalence:
                 "fire_risk": ["low", "medium", "high"],
                 "rainfall": ["low", "medium", "high"],
             },
-            nodata_mask=np.zeros((H, W), dtype=bool),
         )
         # rainfall is independent of slope → its prior
         np.testing.assert_allclose(result["rainfall"][0, 0], [0.3, 0.4, 0.3], atol=1e-5)

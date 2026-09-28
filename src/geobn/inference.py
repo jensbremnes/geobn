@@ -28,11 +28,19 @@ would return numbers for query nodes that are d-separated from the
 contradiction (it prunes that evidence away), so the per-combo loop checks
 P(evidence) explicitly.
 
+Missing inputs
+--------------
+A pixel where some inputs are NoData is solved with the inputs it does have.
+A query node is NaN there only if a missing input is d-connected to it given
+the observed inputs; otherwise its posterior does not depend on the missing
+inputs and is computed as usual.  Pixels are grouped by which inputs are
+missing (usually only a few patterns), and each pattern is solved with its
+observed inputs as evidence.
+
 Data flow
 ---------
 evidence_state_grids  dict[node, (H, W) int16]   state index per pixel
                   (-1 = NoData)
-nodata_mask       (H, W) bool                True where any input is NaN
 
 Returns
 -------
@@ -41,6 +49,7 @@ dict[node, (H, W, n_states) float32]         probability per pixel per state
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 
 import numpy as np
 from pgmpy.inference import VariableElimination
@@ -62,6 +71,89 @@ _MAX_TABLE_CELLS = 20_000_000
 # counts) for requesting them in one pgmpy call.  Above it, each query node is
 # queried separately.  Measured crossover is ~1e5 cells; this leaves margin.
 _MAX_JOINT_QUERY_CELLS = 20_000
+
+# Maps a set of missing input nodes to the query nodes it makes NaN.
+BlankedBy = Callable[[frozenset[str]], frozenset[str]]
+
+
+def make_blanked_by(
+    model: DiscreteBayesianNetwork,
+    evidence_nodes: list[str],
+    query_nodes: list[str],
+) -> BlankedBy:
+    """Return a function giving the query nodes a set of missing inputs blanks.
+
+    A query node is blanked when any missing input is d-connected to it given
+    the inputs that are observed.  Results are memoised per missing set.
+    """
+    evidence_nodes = list(evidence_nodes)
+    query = frozenset(query_nodes)
+    cache: dict[frozenset[str], frozenset[str]] = {}
+
+    def blanked_by(missing: frozenset[str]) -> frozenset[str]:
+        if not missing:
+            return frozenset()
+        if missing not in cache:
+            observed = [n for n in evidence_nodes if n not in missing]
+            trails = model.active_trail_nodes(sorted(missing), observed=observed)
+            reachable = set().union(*trails.values())
+            cache[missing] = query & reachable
+        return cache[missing]
+
+    return blanked_by
+
+
+def _missing_patterns(missing: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Unique rows of the (n, k) bool matrix *missing* and the inverse map."""
+    n, k = missing.shape
+    if k > 62:
+        patterns, inverse = np.unique(missing, axis=0, return_inverse=True)
+        return patterns, inverse.reshape(-1)
+    keys = np.zeros(n, dtype=np.int64)
+    for i in range(k):
+        keys = keys * 2 + missing[:, i]
+    unique_keys, inverse = np.unique(keys, return_inverse=True)
+    shifts = np.arange(k - 1, -1, -1, dtype=np.int64)
+    patterns = ((unique_keys[:, None] >> shifts) & 1).astype(bool)
+    return patterns, inverse.reshape(-1)
+
+
+def _state_matrix(
+    evidence_state_grids: dict[str, np.ndarray], node_order: list[str]
+) -> tuple[tuple[int, ...], np.ndarray]:
+    """Leading shape of the grids and their (n, k) matrix of state indices."""
+    shape = np.shape(evidence_state_grids[node_order[0]])
+    matrix = np.column_stack(
+        [np.asarray(evidence_state_grids[n]).reshape(-1).astype(np.int32) for n in node_order]
+    )
+    return shape, matrix
+
+
+def blank_masks(
+    evidence_state_grids: dict[str, np.ndarray],
+    node_order: list[str],
+    query_nodes: list[str],
+    blanked_by: BlankedBy | None = None,
+) -> dict[str, np.ndarray]:
+    """Where each query node is NaN because an input it depends on is missing.
+
+    Returns one bool array per query node, shaped like the state grids.
+    Without *blanked_by*, any missing input blanks every query node.
+    """
+    shape, matrix = _state_matrix(evidence_state_grids, node_order)
+    missing = matrix < 0
+    masks = {q: np.zeros(matrix.shape[0], dtype=bool) for q in query_nodes}
+    patterns, pixel_to_pattern = _missing_patterns(missing)
+    for p, pattern in enumerate(patterns):
+        if not pattern.any():
+            continue
+        missing_nodes = frozenset(n for n, m in zip(node_order, pattern) if m)
+        blanked = set(query_nodes) if blanked_by is None else blanked_by(missing_nodes)
+        in_pattern = pixel_to_pattern == p
+        for q in query_nodes:
+            if q in blanked:
+                masks[q] |= in_pattern
+    return {q: m.reshape(shape) for q, m in masks.items()}
 
 
 def build_conditional_table(
@@ -297,25 +389,27 @@ def run_inference(
     evidence_state_names: dict[str, list[str]],
     query_nodes: list[str],
     query_state_names: dict[str, list[str]],
-    nodata_mask: np.ndarray,
     ve: VariableElimination | None = None,
 ) -> dict[str, np.ndarray]:
     """Run batched pixel-wise inference.
+
+    A pixel with NoData (index -1) in some inputs is solved with the inputs it
+    has.  A query node is NaN there only when a missing input is d-connected
+    to it given the observed inputs (see :func:`make_blanked_by`).
 
     Parameters
     ----------
     model:
         A fitted pgmpy BayesianNetwork.
     evidence_state_grids:
-        Mapping from evidence node name to (H, W) int16 array of state indices.
+        Mapping from evidence node name to (H, W) int16 array of state indices,
+        -1 for NoData.
     evidence_state_names:
         Mapping from evidence node name to its ordered list of state labels.
     query_nodes:
         Nodes whose posterior distributions are requested.
     query_state_names:
         Mapping from query node name to its ordered list of state labels.
-    nodata_mask:
-        (H, W) boolean array; True where any input pixel is NoData.
     ve:
         Pre-built :class:`pgmpy.inference.VariableElimination` engine.  If
         *None* (default) a new one is created from *model*.  Pass a cached
@@ -326,45 +420,77 @@ def run_inference(
     -------
     Mapping from query node name to a (H, W, n_states) float32 array.
     """
-    H, W = next(iter(evidence_state_grids.values())).shape
     node_list = list(evidence_state_grids.keys())
-    n_states_per_node = [len(evidence_state_names[n]) for n in node_list]
+    (H, W), state_matrix = _state_matrix(evidence_state_grids, node_list)
+    query_nodes = list(dict.fromkeys(query_nodes))
 
-    valid = ~nodata_mask  # (H, W)
-    n_valid = int(valid.sum())
-
-    # Pre-allocate output arrays filled with NaN
+    # Pre-allocate output arrays filled with NaN, and flat (pixel, state) views
+    # of them to write into.
     output: dict[str, np.ndarray] = {}
     for query_node in query_nodes:
         n_states = len(query_state_names[query_node])
         output[query_node] = np.full((H, W, n_states), np.nan, dtype=np.float32)
-
-    if n_valid == 0:
-        return output
-
-    # Matrix where each row is a valid pixel and each column is an evidence node.
-    # The value in each cell is the state index of that node. Dim (n_valid, n_nodes).
-    valid_pixel_state_matrix = np.column_stack(
-        [evidence_state_grids[n][valid].astype(np.int32) for n in node_list]
-    )
-
-    # Find all distinct combinations of evidence states that appear across valid pixels.
-    # If two pixels have identical combinations of evidence states, they appear as one row.
-    #
-    # unique_combos:  one row per distinct combination, e.g. [[0,1], [2,0], [2,2]]
-    # pixel_to_combo: one entry per valid pixel — the row index in unique_combos that
-    #                 pixel belongs to, e.g. [0, 0, 1, 2, 0, ...]
-    unique_combos, pixel_to_combo = _unique_evidence_combos(
-        valid_pixel_state_matrix, n_states_per_node
-    )
-
-    _log.info(
-        "Inference: %d×%d grid, %d/%d valid pixels, %d unique evidence combination(s)",
-        H, W, n_valid, H * W, len(unique_combos),
-    )
+    flat_output = {q: output[q].reshape(H * W, -1) for q in query_nodes}
 
     if ve is None:
         ve = VariableElimination(model)
+    blanked_by = make_blanked_by(model, node_list, query_nodes)
+
+    # Solve each group of pixels that miss the same inputs with the inputs
+    # they have, for the query nodes those missing inputs cannot affect.
+    patterns, pixel_to_pattern = _missing_patterns(state_matrix < 0)
+    for p, pattern in enumerate(patterns):
+        missing = frozenset(n for n, m in zip(node_list, pattern) if m)
+        wanted = [q for q in query_nodes if q not in blanked_by(missing)]
+        if not wanted:
+            continue
+        pixels = np.flatnonzero(pixel_to_pattern == p)
+        observed_cols = np.flatnonzero(~pattern)
+        probs = _posteriors(
+            model,
+            ve,
+            state_matrix[np.ix_(pixels, observed_cols)],
+            [node_list[i] for i in observed_cols],
+            evidence_state_names,
+            wanted,
+            n_grid_pixels=H * W,
+        )
+        for q in wanted:
+            flat_output[q][pixels] = probs[q]
+
+    return output
+
+
+def _posteriors(
+    model: DiscreteBayesianNetwork,
+    ve: VariableElimination,
+    state_matrix: np.ndarray,
+    node_list: list[str],
+    evidence_state_names: dict[str, list[str]],
+    query_nodes: list[str],
+    n_grid_pixels: int,
+) -> dict[str, np.ndarray]:
+    """Posteriors for pixels that observe every node in *node_list*.
+
+    *state_matrix* is (n_pixels, n_nodes).  Returns a (n_pixels, n_states)
+    float32 array per query node.
+    """
+    n_states_per_node = [len(evidence_state_names[n]) for n in node_list]
+
+    # Find all distinct combinations of evidence states that appear across the pixels.
+    # If two pixels have identical combinations of evidence states, they appear as one row.
+    #
+    # unique_combos:  one row per distinct combination, e.g. [[0,1], [2,0], [2,2]]
+    # pixel_to_combo: one entry per pixel — the row index in unique_combos that
+    #                 pixel belongs to, e.g. [0, 0, 1, 2, 0, ...]
+    unique_combos, pixel_to_combo = _unique_evidence_combos(
+        state_matrix, n_states_per_node
+    )
+
+    _log.info(
+        "Inference: %d/%d pixels observing %d input(s), %d unique evidence combination(s)",
+        len(state_matrix), n_grid_pixels, len(node_list), len(unique_combos),
+    )
 
     # For each query node, one probability distribution per unique evidence
     # combination, row-aligned with unique_combos: shape (n_unique, n_states).
@@ -380,34 +506,27 @@ def run_inference(
                 "per query node)", len(unique_combos),
             )
             combo_index = tuple(unique_combos[:, i] for i in range(len(node_list)))
-            probs_per_combo = {q: tables[q][combo_index] for q in query_nodes}
+            probs_per_combo = {
+                # With no evidence nodes the table is one distribution; keep the combo axis.
+                q: tables[q][combo_index] if combo_index else tables[q][np.newaxis]
+                for q in query_nodes
+            }
 
     if probs_per_combo is None:
         probs_per_combo = _query_per_combo(
             ve, model, unique_combos, node_list, evidence_state_names, query_nodes
         )
 
-    # Map inference results back to the spatial grid.
-    # For each query node, every valid pixel is assigned the probability distribution
-    # of its evidence combination, then written into the correct position in the output grid.
-    for query_node in query_nodes:
-
-        # Use pixel_to_combo to give each valid pixel the distribution of its combo: row i = distribution for pixel i.
-        valid_pixel_probs = probs_per_combo[query_node][pixel_to_combo]  # (n_valid, n_states)
-
-        # Write the probabilities into the valid pixel slots of the output grid —
-        # a 3D array (H, W, n_states) where each pixel holds one probability per state.
-        # NaN pixels are left untouched.
-        output[query_node][valid] = valid_pixel_probs
-
-    return output
+    # Every pixel is assigned the probability distribution of its evidence
+    # combination: row i = distribution for pixel i, shape (n_pixels, n_states).
+    return {q: probs_per_combo[q][pixel_to_combo] for q in query_nodes}
 
 
 def run_inference_from_table(
     table: dict[str, np.ndarray],
     node_order: list[str],
     evidence_state_grids: dict[str, np.ndarray],
-    nodata_mask: np.ndarray,
+    blanked_by: BlankedBy | None = None,
 ) -> dict[str, np.ndarray]:
     """Map pixel-wise discrete evidence to precomputed probabilities via fancy indexing.
 
@@ -415,6 +534,13 @@ def run_inference_from_table(
     :meth:`~geobn.GeoBayesianNetwork.precompute`.  Probabilities are read from
     a lookup table using numpy advanced indexing — O(H×W) rather than running
     pgmpy per unique evidence combination.
+
+    For a pixel with NoData in some inputs, a query node that *blanked_by*
+    does not list is independent of those inputs given the observed ones, so
+    every table row over the missing inputs' states holds the same posterior
+    (or NaN where that state combination is impossible).  The first row
+    without NaN is used; if there is none, the observed evidence itself has
+    probability zero and the result is NaN.
 
     Parameters
     ----------
@@ -425,35 +551,77 @@ def run_inference_from_table(
     node_order:
         Evidence node names in the order matching the table axes.
     evidence_state_grids:
-        Mapping from node name to ``(H, W)`` int array of state indices.
-        Nodata pixels (index -1) are masked out via *nodata_mask*.
-    nodata_mask:
-        ``(H, W)`` boolean array; True where any input pixel is NoData.
+        Mapping from node name to an int array of state indices, -1 for NoData.
+        All arrays have the same shape, e.g. ``(H, W)`` or ``(K,)``.
+    blanked_by:
+        Function from a set of missing input nodes to the query nodes it makes
+        NaN, as returned by :func:`make_blanked_by`.  Without it, any missing
+        input makes every query node NaN.
 
     Returns
     -------
-    Mapping from query node name to a ``(H, W, n_states)`` float32 array.
-    NaN where *nodata_mask* is True.
+    Mapping from query node name to a float32 array of the grids' shape plus
+    a trailing ``n_states`` axis.
     """
-    H, W = nodata_mask.shape
-    n_valid = int((~nodata_mask).sum())
-    _log.info("Table lookup: %d×%d grid, %d valid pixels (fast path, no pgmpy)", H, W, n_valid)
+    shape, state_matrix = _state_matrix(evidence_state_grids, node_order)
+    missing = state_matrix < 0
+    complete = ~missing.any(axis=1)
+    _log.info(
+        "Table lookup: %d pixels, %d with every input (fast path, no pgmpy)",
+        len(state_matrix), int(complete.sum()),
+    )
 
-    # One state-grid per evidence node, ordered to match the axes of the precomputed
+    # One state column per evidence node, ordered to match the axes of the precomputed
     # table. Used as a combined index so numpy can read the right probabilities for
-    # every pixel in one operation rather than looping over them.
-    node_state_index_tuple = tuple(evidence_state_grids[n] for n in node_order)
+    # every complete pixel in one operation rather than looping over them.
+    complete_index = tuple(state_matrix[complete, i] for i in range(len(node_order)))
 
-    output: dict[str, np.ndarray] = {}
+    flat: dict[str, np.ndarray] = {}
     for node, tbl in table.items():
-        n_states = tbl.shape[-1]
-        probs = np.asarray(tbl[node_state_index_tuple], dtype=np.float32)
-        # broadcast_to handles the edge case where all indices happen to be scalars
-        probs = np.broadcast_to(probs, (H, W, n_states)).copy()
-        probs[nodata_mask] = np.nan
-        output[node] = probs
+        probs = np.full((len(state_matrix), tbl.shape[-1]), np.nan, dtype=np.float32)
+        probs[complete] = tbl[complete_index]
+        flat[node] = probs
 
-    return output
+    if blanked_by is not None and not complete.all():
+        _fill_partial_from_table(table, node_order, state_matrix, blanked_by, flat)
+
+    return {q: p.reshape(*shape, p.shape[-1]) for q, p in flat.items()}
+
+
+def _fill_partial_from_table(
+    table: dict[str, np.ndarray],
+    node_order: list[str],
+    state_matrix: np.ndarray,
+    blanked_by: BlankedBy,
+    flat: dict[str, np.ndarray],
+) -> None:
+    """Fill pixels with some NoData inputs for the query nodes they do not blank."""
+    partial = np.flatnonzero((state_matrix < 0).any(axis=1))
+    patterns, pixel_to_pattern = _missing_patterns(state_matrix[partial] < 0)
+    k = len(node_order)
+    for p, pattern in enumerate(patterns):
+        missing = frozenset(n for n, m in zip(node_order, pattern) if m)
+        wanted = [q for q in table if q not in blanked_by(missing)]
+        if not wanted:
+            continue
+        pixels = partial[pixel_to_pattern == p]
+        observed_cols = np.flatnonzero(~pattern)
+        missing_cols = np.flatnonzero(pattern)
+        n_states = [table[wanted[0]].shape[i] for i in observed_cols]
+        combos, pixel_to_combo = _unique_evidence_combos(
+            state_matrix[np.ix_(pixels, observed_cols)], n_states
+        )
+        combo_index = tuple(combos[:, j] for j in range(len(observed_cols)))
+        rows = np.arange(len(combos))
+        for q in wanted:
+            # Observed axes first, then the missing ones, then the query states.
+            arranged = np.moveaxis(table[q], [*observed_cols, *missing_cols], list(range(k)))
+            block = arranged[combo_index] if combo_index else arranged[np.newaxis]
+            block = block.reshape(len(combos), -1, block.shape[-1])
+            finite = np.isfinite(block).all(axis=-1)
+            picked = block[rows, finite.argmax(axis=1)].astype(np.float32)
+            picked[~finite.any(axis=1)] = np.nan
+            flat[q][pixels] = picked[pixel_to_combo]
 
 
 def shannon_entropy(probs: np.ndarray) -> np.ndarray:
