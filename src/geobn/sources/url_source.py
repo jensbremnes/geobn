@@ -33,8 +33,11 @@ class URLSource(DataSource):
         On a cache hit the HTTP request is skipped entirely.
     cache_ttl:
         Maximum age of a cache entry, as a :class:`~datetime.timedelta` or a
-        number of seconds.  An older entry is refetched.  The default
-        ``None`` never expires.
+        number of seconds.  The default ``None`` never expires.  When an
+        entry expires and the server sent an ``ETag`` or ``Last-Modified``
+        header with it, the file is requested conditionally: if the server
+        answers that it is unchanged, the cached array is kept and its age
+        reset, and only a changed file is downloaded again.
     valid_range:
         Optional ``(lo, hi)`` tuple.  Values outside this range become NaN.
         Use it for files that encode missing data as an extreme number
@@ -61,11 +64,38 @@ class URLSource(DataSource):
         return {"url": self._url}
 
     def _fetch(self, grid: GridSpec | None = None) -> RasterData:
+        data, _ = self._fetch_revalidating(grid, {})
+        return data
+
+    def _fetch_revalidating(
+        self, grid: GridSpec | None, validators: dict
+    ) -> tuple[RasterData | None, dict]:
+        headers = {}
+        if validators.get("etag"):
+            headers["If-None-Match"] = validators["etag"]
+        if validators.get("last_modified"):
+            headers["If-Modified-Since"] = validators["last_modified"]
+
         _log.info("Fetching %s", self._url)
-        response = requests.get(self._url, timeout=self._timeout)
+        response = requests.get(self._url, timeout=self._timeout, headers=headers)
+
+        if headers and response.status_code == 304:
+            _log.info("Not modified: %s", self._url)
+            return None, {**validators, **_response_validators(response)}
+
         response.raise_for_status()
         _log.info("Downloaded: %.0f KB", len(response.content) / 1024)
 
         with MemoryFile(response.content) as memfile:
             with memfile.open() as src:
-                return read_first_band(src)
+                return read_first_band(src), _response_validators(response)
+
+
+def _response_validators(response: requests.Response) -> dict:
+    """Return the ETag / Last-Modified headers of *response*, if it sent any."""
+    found = {}
+    for key, header in (("etag", "ETag"), ("last_modified", "Last-Modified")):
+        value = response.headers.get(header)
+        if isinstance(value, str) and value:
+            found[key] = value
+    return found

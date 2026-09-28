@@ -86,7 +86,9 @@ bn.set_input("slope_angle", source)
 ```
 
 Add `cache_ttl` (a `timedelta` or seconds) for a file that is updated; an entry older than
-the TTL is downloaded again.
+the TTL is requested again. If the server sent an `ETag` or `Last-Modified` header with the
+file, that request is conditional: a `304 Not Modified` answer keeps the cached array and
+resets its age, and only a changed file is downloaded.
 
 ---
 

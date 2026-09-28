@@ -72,7 +72,9 @@ stays usable. Without a TTL an entry is used forever, which is what terrain and 
 want; with one, an older entry is fetched again.
 
 Each entry is an `.npy` array beside a `.json` sidecar holding its CRS, transform and the
-time it was fetched. `cache_ttl` is not part of the cache key, so changing it re-reads the
+time it was fetched. For `URLSource` the sidecar also holds the `ETag` and `Last-Modified`
+headers the server sent, if any, so an expired entry is checked with a conditional request
+and downloaded again only if the file has changed. `cache_ttl` is not part of the cache key, so changing it re-reads the
 same entry rather than orphaning it.
 
 If an entry has expired and the fetch then fails, the expired entry is returned with a

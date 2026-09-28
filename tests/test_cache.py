@@ -388,6 +388,128 @@ class TestCacheTTLOnSources:
             URLSource("http://x.com/dem.tif", cache_ttl=bad)
 
 
+def _http_response(status=200, content=b"", headers=None):
+    """A stand-in for requests.Response with a status and real headers."""
+    resp = MagicMock(status_code=status, content=content, headers=headers or {})
+    if status >= 400:
+        resp.raise_for_status.side_effect = OSError(f"HTTP {status}")
+    else:
+        resp.raise_for_status.return_value = None
+    return resp
+
+
+def _sidecar(cache_dir):
+    (meta_path,) = cache_dir.glob("*.json")
+    return json.loads(meta_path.read_text())
+
+
+class TestURLSourceRevalidation:
+    URL = "http://x.com/dem.tif"
+    ETAG = '"abc123"'
+    LAST_MODIFIED = "Wed, 01 Jan 2025 00:00:00 GMT"
+
+    def _source(self, tmp_path):
+        return URLSource(self.URL, cache_dir=tmp_path, cache_ttl=3600)
+
+    def _first_fetch(self, tmp_path, headers):
+        tiff = _make_tiff_bytes(np.full((5, 5), 1.0, np.float32))
+        with patch("requests.get", return_value=_http_response(200, tiff, headers)):
+            self._source(tmp_path).fetch()
+
+    def test_validators_are_stored(self, tmp_path):
+        self._first_fetch(tmp_path, {"ETag": self.ETAG, "Last-Modified": self.LAST_MODIFIED})
+        meta = _sidecar(tmp_path)
+        assert meta["etag"] == self.ETAG
+        assert meta["last_modified"] == self.LAST_MODIFIED
+
+    def test_first_request_is_unconditional(self, tmp_path):
+        tiff = _make_tiff_bytes(np.full((5, 5), 1.0, np.float32))
+        with patch("requests.get", return_value=_http_response(200, tiff)) as mock_get:
+            self._source(tmp_path).fetch()
+        assert mock_get.call_args.kwargs["headers"] == {}
+
+    def test_not_modified_keeps_array_and_resets_age(self, tmp_path):
+        self._first_fetch(tmp_path, {"ETag": self.ETAG, "Last-Modified": self.LAST_MODIFIED})
+        _age_cache_entry(tmp_path, seconds=7200)
+        src = self._source(tmp_path)
+
+        with patch("requests.get", return_value=_http_response(304)) as mock_get:
+            data = src.fetch()
+            src.fetch()  # within the TTL again: no request
+
+        assert mock_get.call_count == 1
+        sent = mock_get.call_args.kwargs["headers"]
+        assert sent == {"If-None-Match": self.ETAG, "If-Modified-Since": self.LAST_MODIFIED}
+        assert data.array.mean() == pytest.approx(1.0)
+        meta = _sidecar(tmp_path)
+        assert meta["fetched_at"] == pytest.approx(time.time(), abs=60)
+        assert meta["etag"] == self.ETAG
+
+    def test_not_modified_can_update_validators(self, tmp_path):
+        self._first_fetch(tmp_path, {"ETag": self.ETAG})
+        _age_cache_entry(tmp_path, seconds=7200)
+
+        with patch("requests.get", return_value=_http_response(304, headers={"ETag": '"new"'})):
+            self._source(tmp_path).fetch()
+
+        assert _sidecar(tmp_path)["etag"] == '"new"'
+
+    def test_changed_file_replaces_entry(self, tmp_path):
+        self._first_fetch(tmp_path, {"ETag": self.ETAG})
+        _age_cache_entry(tmp_path, seconds=7200)
+        tiff_b = _make_tiff_bytes(np.full((5, 5), 2.0, np.float32))
+
+        with patch("requests.get", return_value=_http_response(200, tiff_b, {"ETag": '"v2"'})):
+            data = self._source(tmp_path).fetch()
+
+        assert data.array.mean() == pytest.approx(2.0)
+        meta = _sidecar(tmp_path)
+        assert meta["etag"] == '"v2"'
+        assert "last_modified" not in meta
+
+    def test_no_validators_means_full_refetch(self, tmp_path):
+        self._first_fetch(tmp_path, {})
+        assert "etag" not in _sidecar(tmp_path)
+        _age_cache_entry(tmp_path, seconds=7200)
+        tiff_b = _make_tiff_bytes(np.full((5, 5), 2.0, np.float32))
+
+        with patch("requests.get", return_value=_http_response(200, tiff_b)) as mock_get:
+            data = self._source(tmp_path).fetch()
+
+        assert mock_get.call_args.kwargs["headers"] == {}
+        assert data.array.mean() == pytest.approx(2.0)
+
+    def test_corrupt_entry_is_not_revalidated(self, tmp_path):
+        self._first_fetch(tmp_path, {"ETag": self.ETAG})
+        _age_cache_entry(tmp_path, seconds=7200)
+        (npy,) = tmp_path.glob("*.npy")
+        npy.write_bytes(b"not a numpy file")
+        tiff_b = _make_tiff_bytes(np.full((5, 5), 2.0, np.float32))
+
+        with patch("requests.get", return_value=_http_response(200, tiff_b)) as mock_get:
+            data = self._source(tmp_path).fetch()
+
+        assert mock_get.call_args.kwargs["headers"] == {}
+        assert data.array.mean() == pytest.approx(2.0)
+
+    def test_failed_revalidation_serves_stale_with_warning(self, tmp_path):
+        self._first_fetch(tmp_path, {"ETag": self.ETAG})
+        _age_cache_entry(tmp_path, seconds=7200)
+
+        with patch("requests.get", return_value=_http_response(503)):
+            with pytest.warns(UserWarning, match="using cached data"):
+                data = self._source(tmp_path).fetch()
+
+        assert data.array.mean() == pytest.approx(1.0)
+
+    def test_without_cache_a_304_is_never_requested(self, tmp_path):
+        tiff = _make_tiff_bytes(np.full((5, 5), 1.0, np.float32))
+        with patch("requests.get", return_value=_http_response(200, tiff, {"ETag": self.ETAG})) as mock_get:
+            URLSource(self.URL).fetch()
+            URLSource(self.URL).fetch()
+        assert all(c.kwargs["headers"] == {} for c in mock_get.call_args_list)
+
+
 class TestPointGridSourceCache:
     def _counting_fn(self, calls):
         def fn(lat, lon):
