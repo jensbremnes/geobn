@@ -60,20 +60,21 @@ bn = geobn.load("usv_risk.bif")
 bn.set_grid(CRS, RESOLUTION, (WEST, SOUTH, EAST, NORTH))
 ```
 
-### 2. Fetch bathymetry and post-process
+### 2. Bathymetry as water depth
 
 ```python
-raw_depth = bn.fetch_raw(geobn.WCSSource(
+def depth_below_surface(elevation):
+    # EMODnet convention: negative = below sea, positive = land
+    return np.where(elevation <= 0, -elevation, np.nan)   # land → NaN (no inference)
+
+water_depth = geobn.DerivedSource(depth_below_surface, geobn.WCSSource(
     url="https://ows.emodnet-bathymetry.eu/wcs",
     layer="emodnet:mean",
     version="2.0.1",
     valid_range=(-1000.0, 100.0),
     cache_dir=CACHE_DIR,
 ))
-
-# EMODnet convention: negative = below sea, positive = land
-depth = -raw_depth        # positive depth below surface
-depth[depth < 0] = np.nan  # land pixels → NaN (no inference)
+depth = bn.fetch_raw(water_depth)   # the array, for the summary and the map
 ```
 
 Cached after the first run — subsequent runs load from `examples/karmsundet/cache/`.
@@ -110,7 +111,7 @@ indistinguishable.
 ### 4. Wire all inputs and set discretization
 
 ```python
-bn.set_input("water_depth", geobn.ArraySource(depth))
+bn.set_input("water_depth", water_depth)
 
 # AIS density where the raster has data, a medium-traffic prior everywhere else.
 ais_source = geobn.MosaicSource(

@@ -45,6 +45,11 @@ pip install -e ".[dev]"
 | `WCSSource(url, layer, version)` | Generic OGC WCS endpoint (terrain, bathymetry, …) |
 | `PointGridSource(fn, sample_points, delay)` | Sample any `fn(lat, lon) -> float` over the bounding box with user-defined resolution |
 | `MosaicSource(sources, names)` | Combine several sources, taking each pixel from the first one that has data |
+| `DerivedSource(fn, *sources)` | Compute a layer from other sources with `fn(*arrays)`, e.g. elevation → depth |
+
+`geobn.terrain` builds derived sources from an elevation source: `slope`, `aspect`,
+`roughness` and `tpi`. Slope and aspect use geodesic pixel spacing and one-sided
+differences next to NaN.
 
 `URLSource`, `WCSSource` and `PointGridSource` also take `cache_dir` and `cache_ttl` to cache
 fetched data on disk and expire it after a given age.
@@ -71,7 +76,7 @@ DataSources  →  align to grid  →  discretize  →  BN inference  →  Infere
 
 ## Usage
 
-The examples below use the bundled Lyngen Alps avalanche risk model (see [`examples/lyngen_alps/`](examples/lyngen_alps/)) and demonstrate all seven source types.
+The examples below use the bundled Lyngen Alps avalanche risk model (see [`examples/lyngen_alps/`](examples/lyngen_alps/)) and demonstrate every source type.
 
 ### Loading a network
 
@@ -112,13 +117,17 @@ dtm = geobn.WCSSource(
     cache_dir="cache/",
 )
 
-# Also possible to extract data as raw numpy array, and do own processing
-dtm_array = bn.fetch_raw(geobn.WCSSource(...))
-slope_deg, sun_exposure = my_custom_function(dtm_array)
+# geobn.terrain — slope, aspect, roughness and TPI computed from an elevation source
+bn.set_input("slope_angle", geobn.terrain.slope(dtm))
+
+# DerivedSource — any function of other sources, run on the aligned arrays
+bn.set_input("sun_exposure", geobn.DerivedSource(aspect_to_quadrant, geobn.terrain.aspect(dtm)))
+
+# fetch_raw — the values of any source as a numpy array on the grid
+slope_deg = bn.fetch_raw(geobn.terrain.slope(dtm))
 
 # ArraySource (with no CRS) - wire pre-aligned numpy arrays directly
-bn.set_input("slope_angle",  geobn.ArraySource(slope_deg))
-bn.set_input("sun_exposure", geobn.ArraySource(sun_exposure))
+bn.set_input("snow_depth", geobn.ArraySource(snow_depth_array))
 
 # RasterSource — Reads local GeoTIFF from disk
 bn.set_input("forest_cover", geobn.RasterSource("forest_cover.tif"))

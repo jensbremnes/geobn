@@ -3,7 +3,7 @@
 Demonstrates pixel-wise Bayesian risk inference over real Norwegian terrain
 data. The Kartverket Digital Terrain Model (10 m resolution) is fetched via a
 free WCS endpoint; slope angle, aspect, and forest cover are derived
-analytically from the elevation grid. Weather inputs (recent snowfall, air
+from the elevation grid with ``geobn.terrain`` and ``geobn.DerivedSource``. Weather inputs (recent snowfall, air
 temperature, wind speed) are configurable scalar constants — edit the lines at
 the top of this file to explore different weather scenarios.
 
@@ -19,10 +19,10 @@ ConstantSource
 
 Derived inputs
 --------------
-``slope_angle``   — slope in degrees from finite differences of the DEM
-                    (one-sided next to sea/nodata, so no fake coastal cliffs).
-``sun_exposure``  — quadrant the slope faces (0=north, 1=east, 2=west, 3=south)
-                    derived from the same DEM. Risk order: north > east > west > south.
+``slope_angle``   — ``geobn.terrain.slope``: slope in degrees from the DEM
+                    (one-sided differences next to sea, so no fake coastal cliffs).
+``sun_exposure``  — quadrant of ``geobn.terrain.aspect`` (0=north, 1=east,
+                    2=west, 3=south). Risk order: north > east > west > south.
 ``forest_cover``  — treeline heuristic: dense below 400 m, moderate 400–800 m,
                     sparse above 800 m (alpine zone). Derived from the DEM.
 
@@ -78,125 +78,48 @@ CACHE_DIR = Path(__file__).parent / "cache"  # terrain cached here after first r
 
 
 # ---------------------------------------------------------------------------
-# Terrain derivation from DEM
+# Terrain classes derived from the DEM
 # ---------------------------------------------------------------------------
 
-def _nan_gradient(z: np.ndarray, spacing: float, axis: int) -> np.ndarray:
-    """Finite-difference derivative of *z* along *axis* that respects NaN.
+def mask_sea(dem: np.ndarray) -> np.ndarray:
+    """Kartverket returns 0 for sea and fjord surfaces; treat them as nodata."""
+    return np.where(dem > 0, dem, np.nan)
 
-    Central difference where both neighbours are valid, forward or backward
-    difference where only one is, NaN where neither is.  Without NaN this
-    equals ``np.gradient(z, spacing, axis=axis)``.
+
+def aspect_quadrant(aspect_deg: np.ndarray) -> np.ndarray:
+    """Classify aspect (degrees from north) into the BN ``sun_exposure`` codes.
+
+    The north quadrant wraps around 0°, so this cannot be expressed as
+    breakpoints and is done here instead:
+      0 = north (315°–45°)  — highest avalanche risk
+      1 = east  (45°–135°)  — second-highest risk
+      2 = west  (225°–315°) — third
+      3 = south (135°–225°) — lowest risk (most sun exposure)
+    NaN where the aspect is NaN, including perfectly flat cells.
     """
-    pad = [(0, 0)] * z.ndim
-    pad[axis] = (1, 1)
-    zp = np.pad(z.astype(np.float64), pad, constant_values=np.nan)
-    n = z.shape[axis]
-    prev = np.take(zp, range(0, n), axis=axis)
-    nxt = np.take(zp, range(2, n + 2), axis=axis)
-
-    central = (nxt - prev) / (2.0 * spacing)
-    forward = (nxt - z) / spacing
-    backward = (z - prev) / spacing
-    return np.where(
-        np.isfinite(central), central,
-        np.where(np.isfinite(forward), forward, backward),
-    )
-
-
-def compute_slope_aspect(dem: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Return (slope_deg, sun_exposure) derived from a geographic-CRS DEM.
-
-    Parameters
-    ----------
-    dem:
-        Elevation array (H, W) in metres, geographic CRS EPSG:4326.
-        NaN encodes nodata (sea / outside coverage).
-
-    Returns
-    -------
-    slope_deg : float32 (H, W)
-        Slope in degrees (0–90). NaN where the DEM is NaN or a pixel has no
-        valid neighbour along a row or column.
-    sun_exposure : float32 (H, W)
-        Class of the direction the slope faces (downslope), as a numeric
-        code mapped to the BN ``sun_exposure`` states:
-          0 = north (315°–45°)  — highest avalanche risk
-          1 = east  (45°–135°)  — second-highest risk
-          2 = west  (225°–315°) — third
-          3 = south (135°–225°) — lowest risk (most sun exposure)
-        NaN where ``slope_deg`` is NaN.
-    """
-    lat_mid = (SOUTH + NORTH) / 2.0
-    m_per_deg_lat = 111_320.0
-    m_per_deg_lon = 111_320.0 * np.cos(np.radians(lat_mid))
-    pixel_lat_m = RESOLUTION * m_per_deg_lat   # row spacing in metres (~556 m)
-    pixel_lon_m = RESOLUTION * m_per_deg_lon   # col spacing in metres (~201 m)
-
-    # Rows increase southward in a north-up raster, so dz_drow is the
-    # southward partial derivative.  One-sided differences next to nodata
-    # avoid fake cliffs along the coast.
-    dz_drow = _nan_gradient(dem, pixel_lat_m, axis=0)
-    dz_dcol = _nan_gradient(dem, pixel_lon_m, axis=1)
-
-    # Slope magnitude in degrees.
-    slope_deg = np.degrees(
-        np.arctan(np.sqrt(dz_dcol**2 + dz_drow**2))
-    ).astype(np.float32)
-
-    # Aspect = compass bearing the slope faces, i.e. of steepest descent
-    # (0°=N, 90°=E, 180°=S, 270°=W).  arctan2(east, north) of the gradient
-    # gives the ascent bearing; the slope faces the opposite way.
-    # East component = dz_dcol; north component = -dz_drow (rows↑ = south↓).
-    aspect_compass = (np.degrees(np.arctan2(dz_dcol, -dz_drow)) + 180.0) % 360.0
-
-    # Classify into 4 cardinal quadrants ordered by avalanche risk (N highest, S lowest).
-    sun_exposure = np.where(
-        (aspect_compass >= 315.0) | (aspect_compass < 45.0), 0.0,   # north
+    quadrant = np.where(
+        (aspect_deg >= 315.0) | (aspect_deg < 45.0), 0.0,    # north
         np.where(
-            aspect_compass < 135.0, 1.0,                             # east
-            np.where(
-                aspect_compass < 225.0, 3.0,                         # south
-                2.0,                                                  # west
-            ),
+            aspect_deg < 135.0, 1.0,                          # east
+            np.where(aspect_deg < 225.0, 3.0, 2.0),           # south / west
         ),
-    ).astype(np.float32)
-
-    # NaN where the DEM is NaN or a pixel has no valid neighbour along an axis.
-    nodata = np.isnan(dem) | np.isnan(dz_drow) | np.isnan(dz_dcol)
-    slope_deg[nodata]    = np.nan
-    sun_exposure[nodata] = np.nan
-
-    return slope_deg, sun_exposure
+    )
+    return np.where(np.isnan(aspect_deg), np.nan, quadrant)
 
 
-def derive_forest_cover(dem: np.ndarray) -> np.ndarray:
-    """Return a forest cover array derived from elevation (treeline heuristic).
+def treeline_forest_cover(dem: np.ndarray) -> np.ndarray:
+    """Forest cover from elevation (treeline heuristic).
 
     Lyngen Alps treeline is approximately 400 m. Above 800 m the terrain is
-    fully alpine and offers almost no snow anchoring.
-
-    Parameters
-    ----------
-    dem:
-        Elevation array (H, W) in metres. NaN = nodata.
-
-    Returns
-    -------
-    forest_cover : float32 (H, W)
-        Numeric codes matching the BN ``forest_cover`` states:
-          0 = sparse   (> 800 m — alpine zone)
-          1 = moderate (400–800 m — sub-alpine)
-          2 = dense    (< 400 m — forested valley)
-        NaN where DEM is NaN.
+    fully alpine and offers almost no snow anchoring. Codes match the BN
+    ``forest_cover`` states:
+      0 = sparse   (> 800 m — alpine zone)
+      1 = moderate (400–800 m — sub-alpine)
+      2 = dense    (< 400 m — forested valley)
+    NaN where the DEM is NaN.
     """
-    forest_cover = np.where(
-        dem < 400, 2.0,                 # dense forest in valley
-        np.where(dem < 800, 1.0, 0.0)  # moderate sub-alpine / sparse alpine
-    ).astype(np.float32)
-
-    forest_cover[np.isnan(dem)] = np.nan
-    return forest_cover
+    cover = np.where(dem < 400, 2.0, np.where(dem < 800, 1.0, 0.0))
+    return np.where(np.isnan(dem), np.nan, cover)
 
 
 # ---------------------------------------------------------------------------
@@ -218,45 +141,49 @@ def main() -> None:
     bn = geobn.load(bif_path)
     bn.set_grid(CRS, RESOLUTION, (WEST, SOUTH, EAST, NORTH))
 
-    # ── 2. Fetch DTM and derive terrain inputs ────────────────────────────
+    # ── 2. Terrain inputs derived from the DTM ────────────────────────────
+    # Nothing is fetched here: the sources describe how each input is made,
+    # and the DTM is downloaded when the first of them is needed (then read
+    # from the disk cache).
+    dem = geobn.DerivedSource(mask_sea, geobn.WCSSource(
+        url="https://hoydedata.no/arcgis/services/las_dtm_somlos/ImageServer/WCSServer",
+        layer="las_dtm",
+        version="1.0.0",
+        format="GeoTIFF",
+        valid_range=(-500.0, 9000.0),
+        cache_dir=CACHE_DIR,
+    ))
+    slope = geobn.terrain.slope(dem)
+    sun_exposure = geobn.DerivedSource(aspect_quadrant, geobn.terrain.aspect(dem))
+    forest_cover = geobn.DerivedSource(treeline_forest_cover, dem)
+
+    # ── 3. Wire inputs ─────────────────────────────────────────────────────
+    bn.set_input("slope_angle",  slope)
+    bn.set_input("sun_exposure", sun_exposure)
+    bn.set_input("forest_cover", forest_cover)
+    bn.set_input("recent_snow", geobn.ConstantSource(RECENT_SNOW_CM))
+    bn.set_input("temperature",  geobn.ConstantSource(AIR_TEMP_C))
+    bn.set_input("wind_load",    geobn.ConstantSource(WIND_SPEED_MS))
+
+    # The terrain arrays themselves, for the summary below and the map layers.
     print("\nFetching Kartverket DTM (cached after first run) ...")
-    _KARTVERKET_URL = (
-        "https://hoydedata.no/arcgis/services/las_dtm_somlos/ImageServer/WCSServer"
-    )
     try:
-        dem = bn.fetch_raw(geobn.WCSSource(
-            url=_KARTVERKET_URL,
-            layer="las_dtm",
-            version="1.0.0",
-            format="GeoTIFF",
-            valid_range=(-500.0, 9000.0),
-            cache_dir=CACHE_DIR,
-        ))
+        land_pixels = int(np.isfinite(bn.fetch_raw(dem)).sum())
     except Exception as exc:
         sys.exit(f"ERROR fetching DTM: {exc}")
+    slope_deg = bn.fetch_raw(slope)
+    exposure = bn.fetch_raw(sun_exposure)
+    cover = bn.fetch_raw(forest_cover)
 
-    dem[dem <= 0] = np.nan   # ocean / fjord surfaces (Kartverket returns 0 for sea level)
-    slope_deg, sun_exposure = compute_slope_aspect(dem)
-    forest_cover = derive_forest_cover(dem)
-
-    land_pixels = int(np.isfinite(dem).sum())
-    north_pct = 100.0 * float(np.nanmean(sun_exposure == 0.0))
+    north_pct = 100.0 * float(np.nanmean(exposure == 0.0))
     print(f"Terrain     : {land_pixels:,} land pixels  (N-facing: {north_pct:.1f}%)")
     print(f"Slope range : {np.nanmin(slope_deg):.1f}° – "
           f"{np.nanmax(slope_deg):.1f}°  (mean: {np.nanmean(slope_deg):.1f}°)")
 
-    dense_pct    = 100.0 * float(np.nanmean(forest_cover == 2.0))
-    moderate_pct = 100.0 * float(np.nanmean(forest_cover == 1.0))
-    sparse_pct   = 100.0 * float(np.nanmean(forest_cover == 0.0))
+    dense_pct    = 100.0 * float(np.nanmean(cover == 2.0))
+    moderate_pct = 100.0 * float(np.nanmean(cover == 1.0))
+    sparse_pct   = 100.0 * float(np.nanmean(cover == 0.0))
     print(f"Forest cover: dense {dense_pct:.0f}%  moderate {moderate_pct:.0f}%  sparse {sparse_pct:.0f}%")
-
-    # ── 3. Wire inputs ─────────────────────────────────────────────────────
-    bn.set_input("slope_angle",  geobn.ArraySource(slope_deg))
-    bn.set_input("sun_exposure", geobn.ArraySource(sun_exposure))
-    bn.set_input("forest_cover", geobn.ArraySource(forest_cover))
-    bn.set_input("recent_snow", geobn.ConstantSource(RECENT_SNOW_CM))
-    bn.set_input("temperature",  geobn.ConstantSource(AIR_TEMP_C))
-    bn.set_input("wind_load",    geobn.ConstantSource(WIND_SPEED_MS))
 
     # ── 4. Discretizations ────────────────────────────────────────────────
     bn.set_discretization("slope_angle",  [0, 5, 25, 40, 90])
@@ -307,8 +234,8 @@ def main() -> None:
         print(f"  P({state:6s}) mean {p:.2f}  {bar(p)}")
 
     p_high = probs[..., 1]
-    steep_north  = (slope_deg > 35) & (sun_exposure == 0.0)   # north-facing
-    gentle_south = (slope_deg < 25) & (sun_exposure == 3.0)   # south-facing
+    steep_north  = (slope_deg > 35) & (exposure == 0.0)   # north-facing
+    gentle_south = (slope_deg < 25) & (exposure == 3.0)   # south-facing
     p_high_steep_north  = float(np.nanmean(p_high[steep_north]))  if steep_north.any()  else float("nan")
     p_high_gentle_south = float(np.nanmean(p_high[gentle_south])) if gentle_south.any() else float("nan")
 
@@ -321,8 +248,8 @@ def main() -> None:
         OUT_DIR,
         extra_layers={
             "Slope angle (°)": slope_deg,
-            "Sun exposure": sun_exposure,
-            "Forest cover": forest_cover,
+            "Sun exposure": exposure,
+            "Forest cover": cover,
         },
     )
     print(f"\nInteractive map opened in browser → {html_path}")

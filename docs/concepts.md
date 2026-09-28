@@ -161,6 +161,28 @@ the method.
 `ConstantSource` is a special case: it returns a 1×1 sentinel array with `crs=None`,
 which `align_to_grid()` recognises and broadcasts to the full grid shape.
 
+## Derived inputs
+
+An input can be computed from other sources with `DerivedSource(fn, *sources)`. The
+sources are aligned to the reference grid, and `fn` is called with the aligned arrays:
+
+```python
+dem = geobn.WCSSource(url, layer="dtm", cache_dir="cache/")
+
+bn.set_input("slope_angle",  geobn.terrain.slope(dem))
+bn.set_input("forest_cover", geobn.DerivedSource(lambda z: np.where(z < 400, 2.0, 0.0), dem))
+```
+
+`geobn.terrain` provides `slope`, `aspect`, `roughness` and `tpi`, each returning a
+`DerivedSource`. Slope and aspect are computed from the ground distance between pixel
+centres on the WGS84 ellipsoid, so they are correct on grids in degrees as well as in
+metres, and aspect is measured from true north. Next to a NaN pixel the derivative is a
+one-sided difference, so the edge of the data does not show up as a cliff.
+
+A derived source is fetched like any other, when `infer()` or `fetch_raw()` needs it, and
+can be frozen. Because the derivation runs on the reference grid, derivatives such as
+slope describe the terrain at the grid's resolution.
+
 ## Discretization
 
 Bayesian networks operate on discrete states. Every continuous evidence source must be
