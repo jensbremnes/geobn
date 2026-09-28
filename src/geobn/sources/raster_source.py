@@ -26,14 +26,20 @@ class RasterSource(DataSource):
         Optional ``(lo, hi)`` tuple.  Values outside this range become NaN.
         Use it for files that encode missing data as an extreme number
         without declaring it as nodata.  Either bound may be ``None``.
+    resampling:
+        How the file is resampled onto the reference grid: ``"bilinear"``
+        (default), ``"nearest"``, ``"mode"``, ``"average"``, ``"min"`` or
+        ``"max"``.  Use ``"mode"`` or ``"nearest"`` for class rasters such
+        as land cover.  See :class:`~geobn.sources.DataSource`.
     """
 
     def __init__(
         self,
         path: str | Path,
         valid_range: tuple[float | None, float | None] | None = None,
+        resampling: str = "bilinear",
     ) -> None:
-        super().__init__(valid_range=valid_range)
+        super().__init__(valid_range=valid_range, resampling=resampling)
         self._path = Path(path)
 
     def _fetch(self, grid: GridSpec | None = None) -> RasterData:

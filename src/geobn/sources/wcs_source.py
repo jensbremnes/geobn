@@ -63,6 +63,13 @@ class WCSSource(DataSource):
         Either bound may be ``None``.  The cached array is the one the
         server sent, so changing the range re-masks it without requesting
         the coverage again.
+    resampling:
+        How the coverage is resampled onto the reference grid:
+        ``"bilinear"`` (default), ``"nearest"``, ``"mode"``, ``"average"``,
+        ``"min"`` or ``"max"``.  The coverage is requested at the server's
+        native resolution, so ``"max"`` or ``"min"`` keeps small features
+        of a finer coverage on a coarser grid.  See
+        :class:`~geobn.sources.DataSource`.
     """
 
     requires_grid = True
@@ -79,9 +86,11 @@ class WCSSource(DataSource):
         valid_range: tuple[float | None, float | None] | None = None,
         axis_labels: tuple[str, str] = ("Long", "Lat"),
         cache_ttl: timedelta | float | None = None,
+        resampling: str = "bilinear",
     ) -> None:
         super().__init__(
-            valid_range=valid_range, cache_dir=cache_dir, cache_ttl=cache_ttl
+            valid_range=valid_range, cache_dir=cache_dir, cache_ttl=cache_ttl,
+            resampling=resampling,
         )
         if (
             isinstance(axis_labels, str)

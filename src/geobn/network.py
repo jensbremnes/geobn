@@ -371,10 +371,12 @@ class GeoBayesianNetwork:
                 "No grid configured.  Call bn.set_grid(crs, resolution, extent) first."
             )
         if not return_provenance:
-            return align_to_grid(source.fetch(grid=self._grid), self._grid)
+            return align_to_grid(
+                source.fetch(grid=self._grid), self._grid, source.resampling
+            )
 
         data, provenance = source.fetch_with_provenance(grid=self._grid)
-        array = align_to_grid(data, self._grid)
+        array = align_to_grid(data, self._grid, source.resampling)
         if provenance is None:
             provenance = np.where(np.isnan(array), -1, 0).astype(np.int16)
         return array, provenance
@@ -1047,7 +1049,7 @@ class GeoBayesianNetwork:
                     if node in pre_fetched
                     else source.fetch(grid=ref_grid)
                 )
-                arr = align_to_grid(data, ref_grid)
+                arr = align_to_grid(data, ref_grid, source.resampling)
                 idx = self._to_bn_state_order(node, discretize_array(arr, spec))
 
                 if node in self._frozen_nodes:

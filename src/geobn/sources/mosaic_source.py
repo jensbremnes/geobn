@@ -147,7 +147,7 @@ class MosaicSource(DataSource):
     ) -> np.ndarray | None:
         """Fetch one source and align it to *grid*, or return None when it is skipped."""
         try:
-            return align_to_grid(source.fetch(grid=grid), grid)
+            return align_to_grid(source.fetch(grid=grid), grid, source.resampling)
         except Exception as exc:
             if self._on_error == "raise":
                 raise

@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from .._types import RasterData
+from ..grid import _check_resampling
 
 if TYPE_CHECKING:
     from ..grid import GridSpec
@@ -47,6 +48,31 @@ class DataSource(ABC):
         ``None`` never expires, which suits data that does not change, such
         as terrain.  If the refetch fails and an expired entry exists, that
         entry is returned with a :class:`UserWarning` giving its age.
+    resampling:
+        How the source is resampled onto the reference grid when its CRS,
+        resolution or extent differ from the grid's:
+
+        - ``"bilinear"`` (default) interpolates between the four source
+          pixels around each grid pixel centre.  It suits continuous data
+          at a similar or coarser resolution than the grid.
+        - ``"nearest"`` takes the source pixel under the grid pixel centre.
+        - ``"mode"`` takes the most frequent value among the source pixels
+          within each grid pixel, ties going to the smallest value.  Use it,
+          or ``"nearest"``, for class rasters such as land cover or seabed
+          type, where interpolating would produce codes that are not
+          classes.
+        - ``"average"``, ``"min"`` and ``"max"`` take the mean, minimum or
+          maximum of the source pixels within each grid pixel.  Use them
+          when the source is finer than the grid: ``"average"`` for
+          continuous data, and ``"max"`` or ``"min"`` for hazard layers,
+          where a small steep slope or a shallow shoal must not be averaged
+          away.
+
+        ``"mode"``, ``"average"``, ``"min"`` and ``"max"`` ignore NaN
+        pixels, so a grid pixel is NaN only when none of its source pixels
+        has data.  Where the source is coarser than the grid, each grid
+        pixel lies within one source pixel and these methods give the same
+        result as ``"nearest"``.
     """
 
     # Subclasses that require a grid bbox before they can fetch (e.g. WCS,
@@ -64,10 +90,17 @@ class DataSource(ABC):
         valid_range: tuple[float | None, float | None] | None = None,
         cache_dir: str | Path | None = None,
         cache_ttl: timedelta | float | None = None,
+        resampling: str = "bilinear",
     ) -> None:
         self._valid_range = _check_valid_range(valid_range)
         self._cache_dir = Path(cache_dir).expanduser() if cache_dir is not None else None
         self._cache_ttl = _check_cache_ttl(cache_ttl)
+        self._resampling = _check_resampling(resampling)
+
+    @property
+    def resampling(self) -> str:
+        """The method used to resample this source onto the reference grid."""
+        return self._resampling
 
     def fetch(self, grid: GridSpec | None = None) -> RasterData:
         """Fetch data aligned to *grid* if provided.
