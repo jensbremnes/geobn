@@ -110,6 +110,20 @@ class DataSource(ABC):
         """
         return None
 
+    def _fetch_revalidating(
+        self, grid: GridSpec | None, validators: dict
+    ) -> tuple[RasterData | None, dict]:
+        """Fetch for the disk cache, optionally as a conditional request.
+
+        *validators* holds the ``etag`` / ``last_modified`` stored with the
+        current cache entry, or is empty when there is no usable entry.
+        Returns ``(data, validators)`` where *validators* are the ones to
+        store with the entry, or ``(None, validators)`` when the server
+        confirmed the cached data is unchanged.  The default ignores
+        *validators* and calls :meth:`_fetch`.
+        """
+        return self._fetch(grid), {}
+
     # ------------------------------------------------------------------
     # Disk cache
     # ------------------------------------------------------------------
@@ -123,8 +137,10 @@ class DataSource(ABC):
         from ._cache import (  # noqa: PLC0415
             _cache_age,
             _load_cached,
+            _load_validators,
             _make_cache_path,
             _save_cached,
+            _touch_cached,
         )
 
         cache_path = _make_cache_path(self._cache_dir, key)
@@ -132,11 +148,16 @@ class DataSource(ABC):
         if cached is not None:
             return cached
 
+        # Offer the validators only for an entry that loads, so an
+        # "unchanged" answer always has an array to fall back on.  Without a
+        # TTL nothing expires, so the miss above means no usable entry.
+        stale = _load_cached(cache_path) if self._cache_ttl is not None else None
+        validators = _load_validators(cache_path) if stale is not None else {}
+
         try:
-            result = self._fetch(grid)
+            result, new_validators = self._fetch_revalidating(grid, validators)
         except Exception:
             # An expired entry beats no data at all, but say so out loud.
-            stale = _load_cached(cache_path)
             if stale is None:
                 raise
             age = _cache_age(cache_path)
@@ -148,7 +169,16 @@ class DataSource(ABC):
             )
             return stale
 
-        _save_cached(cache_path, result)
+        if result is None:
+            if stale is None:
+                raise RuntimeError(
+                    f"{type(self).__name__} reported cached data as unchanged, "
+                    "but there is no cache entry to reuse."
+                )
+            _touch_cached(cache_path, new_validators)
+            return stale
+
+        _save_cached(cache_path, result, new_validators)
         return result
 
 

@@ -226,7 +226,7 @@ snow = geobn.URLSource("https://example.com/recent_snow.tif", cache_dir="cache/"
 
 This is particularly useful when iterating on discretization rules or BN structure — fetch the terrain data once, then experiment freely without waiting for remote requests on every run.
 
-Add `cache_ttl` for data that changes. An entry older than the TTL is fetched again; without one, a cached entry is used forever, which is what terrain and bathymetry want.
+Add `cache_ttl` for data that changes. An entry older than the TTL is fetched again; without one, a cached entry is used forever, which is what terrain and bathymetry want. For `URLSource`, when the server sent an `ETag` or `Last-Modified` header, the refetch is a conditional request, so an unchanged file is not downloaded again.
 
 ```python
 from datetime import timedelta
