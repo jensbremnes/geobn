@@ -30,6 +30,11 @@ class ArraySource(DataSource):
     valid_range:
         Optional ``(lo, hi)`` tuple.  Values outside this range become NaN.
         Either bound may be ``None``.  The array passed in is left untouched.
+    resampling:
+        How the array is resampled onto the reference grid when it has a
+        *crs* and *transform*: ``"bilinear"`` (default), ``"nearest"``,
+        ``"mode"``, ``"average"``, ``"min"`` or ``"max"``.  See
+        :class:`~geobn.sources.DataSource`.
     """
 
     def __init__(
@@ -38,8 +43,9 @@ class ArraySource(DataSource):
         crs: str | None = None,
         transform: Affine | None = None,
         valid_range: tuple[float | None, float | None] | None = None,
+        resampling: str = "bilinear",
     ) -> None:
-        super().__init__(valid_range=valid_range)
+        super().__init__(valid_range=valid_range, resampling=resampling)
         if array.ndim != 2:
             raise ValueError(f"array must be 2-D (H, W), got shape {array.shape}")
         self._array = array.astype(np.float32)

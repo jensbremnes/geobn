@@ -566,3 +566,46 @@ class TestMosaicSourceEndToEnd:
 
         assert isinstance(values, np.ndarray)
         assert np.all(values == 42.0)
+
+
+class TestResampling:
+    @pytest.fixture
+    def spike(self):
+        """10×10 zero slope with one steep pixel at [2, 2]."""
+        array = np.zeros((10, 10), dtype=np.float32)
+        array[2, 2] = 80.0
+        return array
+
+    def test_fetch_raw_uses_the_source_method(self, bn, spike, reference_transform):
+        bn.set_grid("EPSG:4326", 0.2, (0.0, 49.0, 1.0, 50.0))
+        bilinear = bn.fetch_raw(
+            geobn.ArraySource(spike, crs="EPSG:4326", transform=reference_transform)
+        )
+        peak = bn.fetch_raw(
+            geobn.ArraySource(
+                spike, crs="EPSG:4326", transform=reference_transform, resampling="max"
+            )
+        )
+        assert bilinear[1, 1] == pytest.approx(20.0)
+        assert peak[1, 1] == pytest.approx(80.0)
+
+    def test_infer_uses_the_source_method(self, bn, spike, reference_transform):
+        bn.set_input("rainfall", geobn.ConstantSource(50.0))
+        bn.set_discretization("slope", [0, 10, 30, 90], ["flat", "moderate", "steep"])
+        bn.set_discretization("rainfall", [0, 25, 75, 200], ["low", "medium", "high"])
+        bn.set_grid("EPSG:4326", 0.2, (0.0, 49.0, 1.0, 50.0))
+
+        high = {}
+        for method in ("bilinear", "max"):
+            bn.set_input(
+                "slope",
+                geobn.ArraySource(
+                    spike, crs="EPSG:4326", transform=reference_transform, resampling=method
+                ),
+            )
+            probs = bn.infer(query=["fire_risk"]).probabilities["fire_risk"]
+            high[method] = probs[1, 1, 2]
+
+        # slope=moderate → P(high)=0.30, slope=steep → P(high)=0.60 at medium rainfall
+        assert high["bilinear"] == pytest.approx(0.30)
+        assert high["max"] == pytest.approx(0.60)

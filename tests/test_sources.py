@@ -698,3 +698,51 @@ class TestMosaicErrors:
     def test_invalid_on_error_raises(self, bad):
         with pytest.raises(ValueError, match="on_error"):
             geobn.MosaicSource([geobn.ConstantSource(1.0)], on_error=bad)
+
+
+# ---------------------------------------------------------------------------
+# resampling
+# ---------------------------------------------------------------------------
+
+
+def _resampling_sources(method=None):
+    kwargs = {} if method is None else {"resampling": method}
+    return [
+        geobn.RasterSource("unused.tif", **kwargs),
+        geobn.URLSource("https://example.com/a.tif", **kwargs),
+        WCSSource("https://example.com/wcs", "layer", **kwargs),
+        geobn.ArraySource(np.zeros((2, 2)), **kwargs),
+        PointGridSource(lambda lat, lon: 0.0, **kwargs),
+    ]
+
+
+class TestResamplingParameter:
+    def test_default_is_bilinear(self):
+        for source in _resampling_sources():
+            assert source.resampling == "bilinear"
+
+    @pytest.mark.parametrize("method", ["nearest", "mode", "average", "min", "max"])
+    def test_every_source_stores_it(self, method):
+        for source in _resampling_sources(method):
+            assert source.resampling == method
+
+    @pytest.mark.parametrize("bad", ["cubic", "", None, 1])
+    def test_invalid_value_raises(self, bad):
+        with pytest.raises(ValueError, match="resampling must be one of"):
+            geobn.ArraySource(np.zeros((2, 2)), resampling=bad)
+
+
+class TestMosaicResampling:
+    def test_each_source_uses_its_own_method(self, small_grid):
+        """A class raster at twice the grid resolution keeps its classes with mode."""
+        fine = Affine(0.05, 0, 5.0, 0, -0.05, 62.0)
+        classes = np.tile(np.array([[1, 2], [2, 2]], dtype=np.float32), (5, 5))
+        blended = geobn.MosaicSource(
+            [geobn.ArraySource(classes, crs="EPSG:4326", transform=fine)]
+        ).fetch(grid=small_grid)
+        kept = geobn.MosaicSource(
+            [geobn.ArraySource(classes, crs="EPSG:4326", transform=fine, resampling="mode")]
+        ).fetch(grid=small_grid)
+
+        assert not np.isin(blended.array, [1.0, 2.0]).all()
+        np.testing.assert_array_equal(kept.array, np.full((5, 5), 2.0))

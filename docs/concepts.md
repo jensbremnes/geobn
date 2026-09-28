@@ -126,8 +126,37 @@ A node cannot be both an input and a query node. `infer()`, `precompute()` and
 
 ## GridSpec and alignment
 
-The reference grid is described by a `GridSpec(crs, transform, shape)`. Grid alignment
-uses pure numpy + pyproj bilinear interpolation — no rasterio dependency.
+The reference grid is described by a `GridSpec(crs, transform, shape)`. Every source is
+reprojected and resampled onto it with numpy and pyproj; rasterio is not involved.
+
+How a source is resampled is set per source with `resampling=`:
+
+| Method | Value of a grid pixel | Typical use |
+|---|---|---|
+| `"bilinear"` (default) | Interpolated from the four source pixels around its centre | Continuous data at a similar or coarser resolution than the grid |
+| `"nearest"` | The source pixel under its centre | Class rasters |
+| `"mode"` | The most frequent source value within it (ties: smallest value) | Class rasters finer than the grid, e.g. land cover or seabed type |
+| `"average"` | The mean of the source pixels within it | Continuous data finer than the grid |
+| `"min"` / `"max"` | The minimum / maximum of the source pixels within it | Hazard layers finer than the grid |
+
+```python
+bn.set_input("land_cover", geobn.RasterSource("landcover_10m.tif", resampling="mode"))
+bn.set_input("slope",      geobn.RasterSource("slope_1m.tif", resampling="max"))
+```
+
+Bilinear interpolation of a class raster produces codes that are not classes, such as 1.5
+between classes 1 and 2, which are then discretized as if they were real values. Bilinear
+interpolation also samples a source finer than the grid at one point per grid pixel, so a
+narrow feature such as a steep gully or a shallow shoal can fall between the samples and
+vanish. `"max"` or `"min"` keeps it.
+
+The aggregating methods (`"mode"`, `"average"`, `"min"`, `"max"`) ignore NaN, so a grid
+pixel is NaN only when none of its source pixels has data. Where the source is coarser
+than the grid, each grid pixel lies within one source pixel and these methods give the
+same result as `"nearest"`. They visit the source pixels by sampling each grid pixel on a
+regular lattice spaced at most one source pixel apart, capped at 64 × 64 samples per grid
+pixel. A source already on the grid and a source without a CRS are used as they are, whatever
+the method.
 
 `ConstantSource` is a special case: it returns a 1×1 sentinel array with `crs=None`,
 which `align_to_grid()` recognises and broadcasts to the full grid shape.

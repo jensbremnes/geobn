@@ -23,8 +23,8 @@ class PointGridSource(DataSource):
     Builds a regular grid of *sample_points* × *sample_points* WGS84 points
     covering the inference bounding box, calls ``fn(lat, lon)`` at each point,
     and assembles the results into a coarse EPSG:4326 raster.
-    ``align_to_grid()`` then bilinearly resamples this raster to the reference
-    grid resolution.
+    This raster is then resampled to the reference grid, bilinearly unless
+    *resampling* says otherwise.
 
     This is the generic primitive for any point-queryable data source (weather
     APIs, elevation services, custom models).  Pass a lambda or a regular
@@ -60,6 +60,12 @@ class PointGridSource(DataSource):
         number of seconds.  An older entry is resampled.  Forecasts are the
         usual case for this, e.g. ``cache_ttl=timedelta(hours=6)``.  The
         default ``None`` never expires.
+    resampling:
+        How the sampled lattice is resampled onto the reference grid.  The
+        lattice is coarser than the grid, so ``"bilinear"`` (default)
+        interpolates between samples, and every other method gives each
+        grid pixel the value of the sample cell it lies in.  See
+        :class:`~geobn.sources.DataSource`.
     """
 
     requires_grid = True
@@ -73,9 +79,11 @@ class PointGridSource(DataSource):
         name: str | None = None,
         cache_dir: str | Path | None = None,
         cache_ttl: timedelta | float | None = None,
+        resampling: str = "bilinear",
     ) -> None:
         super().__init__(
-            valid_range=valid_range, cache_dir=cache_dir, cache_ttl=cache_ttl
+            valid_range=valid_range, cache_dir=cache_dir, cache_ttl=cache_ttl,
+            resampling=resampling,
         )
         if cache_dir is not None and not name:
             raise ValueError(

@@ -58,6 +58,14 @@ source = geobn.RasterSource("dem_10m.tif")
 bn.set_input("elevation", source)
 ```
 
+**Example — a class raster:**
+
+```python
+# Most frequent class per grid pixel, so no in-between codes appear
+source = geobn.RasterSource("land_cover.tif", resampling="mode")
+bn.set_input("land_cover", source)
+```
+
 **Example — masking undeclared sentinel values:**
 
 ```python
@@ -184,8 +192,8 @@ bn.set_input("sea_temp", source)
       show_root_heading: true
 
 Each source is aligned to the reference grid before the merge, so they may differ in CRS,
-resolution and extent. Alignment is bilinear, so the seam between two sources follows the
-resampled footprint of the higher-priority one. Sources are fetched in order and only
+resolution and extent. Each source is resampled with its own `resampling` method, and the
+seam between two sources follows the resampled footprint of the higher-priority one. Sources are fetched in order and only
 while pixels remain uncovered, so a remote source at the end of the list costs nothing
 when the sources above it already cover the grid.
 

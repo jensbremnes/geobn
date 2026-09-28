@@ -44,6 +44,10 @@ class URLSource(DataSource):
         without declaring it as nodata.  Either bound may be ``None``.  The
         cached array is the one the server sent, so changing the range
         re-masks it without downloading again.
+    resampling:
+        How the file is resampled onto the reference grid: ``"bilinear"``
+        (default), ``"nearest"``, ``"mode"``, ``"average"``, ``"min"`` or
+        ``"max"``.  See :class:`~geobn.sources.DataSource`.
     """
 
     def __init__(
@@ -53,9 +57,11 @@ class URLSource(DataSource):
         cache_dir: str | Path | None = None,
         valid_range: tuple[float | None, float | None] | None = None,
         cache_ttl: timedelta | float | None = None,
+        resampling: str = "bilinear",
     ) -> None:
         super().__init__(
-            valid_range=valid_range, cache_dir=cache_dir, cache_ttl=cache_ttl
+            valid_range=valid_range, cache_dir=cache_dir, cache_ttl=cache_ttl,
+            resampling=resampling,
         )
         self._url = url
         self._timeout = timeout

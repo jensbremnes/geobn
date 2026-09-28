@@ -203,3 +203,150 @@ class TestBilinearResample:
         cols = np.array([[10.0]])
         result = _bilinear_resample(src, rows, cols)
         assert np.isnan(result[0, 0])
+
+
+# ---------------------------------------------------------------------------
+# Resampling methods
+# ---------------------------------------------------------------------------
+
+_UNIT = Affine(1.0, 0, 0.0, 0, -1.0, 4.0)     # 1° pixels, 4×4 over (0..4, 0..4)
+_HALF = Affine(2.0, 0, 0.0, 0, -2.0, 4.0)     # 2° pixels, 2×2 over the same area
+
+
+def _align(array, src_transform, dst_transform, dst_shape, method, src_crs="EPSG:4326"):
+    data = RasterData(array=np.asarray(array, dtype=np.float32), crs=src_crs, transform=src_transform)
+    grid = GridSpec(crs="EPSG:4326", transform=dst_transform, shape=dst_shape)
+    return align_to_grid(data, grid, resampling=method)
+
+
+class TestResampling:
+    block = np.array(
+        [
+            [1, 2, 5, 5],
+            [3, 3, 5, 7],
+            [0, 0, 9, 9],
+            [0, 4, 9, 1],
+        ],
+        dtype=np.float32,
+    )
+
+    def test_default_is_bilinear(self):
+        data = RasterData(array=self.block, crs="EPSG:4326", transform=_UNIT)
+        grid = GridSpec(crs="EPSG:4326", transform=_HALF, shape=(2, 2))
+        np.testing.assert_array_equal(
+            align_to_grid(data, grid), align_to_grid(data, grid, resampling="bilinear")
+        )
+
+    def test_unknown_method_raises(self):
+        with pytest.raises(ValueError, match="resampling must be one of"):
+            _align(self.block, _UNIT, _HALF, (2, 2), "cubic")
+
+    @pytest.mark.parametrize(
+        "method, expected",
+        [
+            ("average", [[2.25, 5.5], [1.0, 7.0]]),
+            ("min", [[1, 5], [0, 1]]),
+            ("max", [[3, 7], [4, 9]]),
+            ("mode", [[3, 5], [0, 9]]),
+        ],
+    )
+    def test_downsampling_aggregates_each_block(self, method, expected):
+        result = _align(self.block, _UNIT, _HALF, (2, 2), method)
+        np.testing.assert_allclose(result, np.array(expected, dtype=np.float32))
+
+    def test_max_keeps_a_single_pixel_spike(self):
+        src = np.zeros((10, 10), dtype=np.float32)
+        src[2, 2] = 80.0
+        fine = Affine(0.1, 0, 0.0, 0, -0.1, 50.0)
+        coarse = Affine(0.2, 0, 0.0, 0, -0.2, 50.0)
+        assert _align(src, fine, coarse, (5, 5), "max")[1, 1] == pytest.approx(80.0)
+        assert _align(src, fine, coarse, (5, 5), "bilinear")[1, 1] == pytest.approx(20.0)
+
+    def test_nearest_produces_only_source_classes(self):
+        classes = np.array([[1, 1, 2, 2]] * 4, dtype=np.float32)
+        # Grid shifted by half a source pixel: bilinear would blend 1 and 2.
+        shifted = Affine(1.0, 0, 0.5, 0, -1.0, 4.0)
+        bilinear = _align(classes, _UNIT, shifted, (4, 3), "bilinear")
+        nearest = _align(classes, _UNIT, shifted, (4, 3), "nearest")
+        assert 1.5 in bilinear
+        assert set(np.unique(nearest[~np.isnan(nearest)])) <= {1.0, 2.0}
+
+    def test_mode_tie_goes_to_smallest_value(self):
+        src = np.array([[4, 2], [2, 4]], dtype=np.float32)
+        result = _align(src, Affine(1.0, 0, 0.0, 0, -1.0, 2.0),
+                        Affine(2.0, 0, 0.0, 0, -2.0, 2.0), (1, 1), "mode")
+        assert result[0, 0] == 2.0
+
+    @pytest.mark.parametrize("method", ["mode", "average", "min", "max"])
+    def test_aggregation_ignores_nan(self, method):
+        src = self.block.copy()
+        src[0, 0] = np.nan           # partly missing block
+        src[2:, :2] = np.nan         # fully missing block
+        result = _align(src, _UNIT, _HALF, (2, 2), method)
+        expected_first = {"mode": 3.0, "average": 8 / 3, "min": 2.0, "max": 3.0}[method]
+        assert result[0, 0] == pytest.approx(expected_first)
+        assert np.isnan(result[1, 0])
+        assert not np.isnan(result[0, 1])
+
+    @pytest.mark.parametrize("method", ["nearest", "mode", "average", "min", "max"])
+    def test_outside_extent_is_nan(self, method):
+        # Destination 4×4 at 2° starting at the source origin: only the top-left 2×2 overlaps.
+        wide = Affine(2.0, 0, 0.0, 0, -2.0, 4.0)
+        result = _align(self.block, _UNIT, wide, (4, 4), method)
+        assert not np.isnan(result[:2, :2]).any()
+        assert np.isnan(result[2:, :]).all()
+        assert np.isnan(result[:, 2:]).all()
+
+    @pytest.mark.parametrize("method", ["mode", "average", "min", "max"])
+    def test_upsampling_matches_nearest(self, method):
+        src = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
+        coarse = Affine(1.0, 0, 0.0, 0, -1.0, 2.0)
+        fine = Affine(0.25, 0, 0.0, 0, -0.25, 2.0)
+        np.testing.assert_array_equal(
+            _align(src, coarse, fine, (8, 8), method),
+            _align(src, coarse, fine, (8, 8), "nearest"),
+        )
+
+    @pytest.mark.parametrize("method", ["nearest", "mode", "average", "min", "max"])
+    def test_grid_match_returns_source_unchanged(self, method):
+        np.testing.assert_array_equal(
+            _align(self.block, _UNIT, _UNIT, (4, 4), method), self.block
+        )
+
+    @pytest.mark.parametrize("method", ["nearest", "mode", "average", "min", "max"])
+    def test_cross_crs_keeps_a_uniform_value(self, method):
+        src = np.full((100, 100), 3.0, dtype=np.float32)
+        src_transform = Affine(1000.0, 0, 450000.0, 0, -1000.0, 6701444.0)
+        dst_transform = Affine(0.05, 0, 8.97, 0, -0.05, 60.05)
+        result = _align(src, src_transform, dst_transform, (5, 5), method, src_crs="EPSG:32632")
+        valid = result[~np.isnan(result)]
+        assert valid.size > 0
+        np.testing.assert_allclose(valid, 3.0)
+
+    def test_cross_crs_max_finds_a_spike(self):
+        """A one-pixel spike in UTM survives max onto a coarser lat/lon grid."""
+        src = np.zeros((100, 100), dtype=np.float32)
+        src[50, 50] = 99.0
+        src_transform = Affine(100.0, 0, 495000.0, 0, -100.0, 6656444.0)
+        transformer = Transformer.from_crs("EPSG:32632", "EPSG:4326", always_xy=True)
+        lon0, lat1 = transformer.transform(495000.0, 6656444.0)
+        lon1, lat0 = transformer.transform(505000.0, 6646444.0)
+        res = 0.02
+        dst_transform = Affine(res, 0, lon0, 0, -res, lat1)
+        shape = (int((lat1 - lat0) / res), int((lon1 - lon0) / res))
+        result = _align(src, src_transform, dst_transform, shape, "max", src_crs="EPSG:32632")
+        assert np.nanmax(result) == pytest.approx(99.0)
+        assert np.nanmax(_align(src, src_transform, dst_transform, shape, "bilinear",
+                                src_crs="EPSG:32632")) < 99.0
+
+    def test_aggregation_is_chunked(self, monkeypatch):
+        """Results do not depend on how many rows are processed at once."""
+        import geobn.grid as grid_module
+
+        rng = np.random.default_rng(0)
+        src = rng.integers(0, 5, (40, 40)).astype(np.float32)
+        fine = Affine(0.1, 0, 0.0, 0, -0.1, 4.0)
+        coarse = Affine(0.4, 0, 0.0, 0, -0.4, 4.0)
+        whole = _align(src, fine, coarse, (10, 10), "mode")
+        monkeypatch.setattr(grid_module, "_SAMPLE_BUDGET", 16)
+        np.testing.assert_array_equal(_align(src, fine, coarse, (10, 10), "mode"), whole)
