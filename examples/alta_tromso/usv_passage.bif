@@ -1,0 +1,237 @@
+// USV passage risk for a small unmanned surface vessel (about 5-10 m long).
+//
+// Six inputs feed four risk mechanisms, which combine into usv_risk.  State
+// thresholds for the inputs are set in run_example.py (BREAKPOINTS).  The
+// probabilities are expert judgement for a vessel of this size, not fitted to
+// data; the comment above each table gives the reasoning.
+
+network usv_passage {
+}
+
+variable water_depth {
+  type discrete [ 4 ] { very_shallow, shallow, moderate, deep };
+}
+
+variable wave_height {
+  type discrete [ 4 ] { calm, moderate, rough, severe };
+}
+
+variable current_speed {
+  type discrete [ 3 ] { weak, moderate, strong };
+}
+
+variable vessel_traffic {
+  type discrete [ 3 ] { low, medium, high };
+}
+
+variable air_temperature {
+  type discrete [ 3 ] { freezing, near_zero, mild };
+}
+
+variable wind_speed {
+  type discrete [ 3 ] { light, strong, gale };
+}
+
+variable grounding_risk {
+  type discrete [ 3 ] { low, medium, high };
+}
+
+variable sea_state_risk {
+  type discrete [ 3 ] { low, medium, high };
+}
+
+variable collision_risk {
+  type discrete [ 3 ] { low, medium, high };
+}
+
+variable icing_risk {
+  type discrete [ 3 ] { low, medium, high };
+}
+
+variable usv_risk {
+  type discrete [ 3 ] { low, medium, high };
+}
+
+// Uniform priors on the inputs.  Every input is observed at every pixel, so
+// the priors do not affect the maps.
+probability ( water_depth ) {
+  table 0.25, 0.25, 0.25, 0.25;
+}
+
+probability ( wave_height ) {
+  table 0.25, 0.25, 0.25, 0.25;
+}
+
+probability ( current_speed ) {
+  table 0.333, 0.334, 0.333;
+}
+
+probability ( vessel_traffic ) {
+  table 0.333, 0.334, 0.333;
+}
+
+probability ( air_temperature ) {
+  table 0.333, 0.334, 0.333;
+}
+
+probability ( wind_speed ) {
+  table 0.333, 0.334, 0.333;
+}
+
+// Grounding and striking the bottom.  Water under 5 m is a hazard in any
+// weather: the charted depth at 250 m resolution hides rocks and skerries.
+// Waves break when they reach roughly 0.8 times the water depth, so in 5-20 m
+// of water rough and severe seas turn into breaking waves that can throw the
+// vessel onto the shoal.  This is what keeps the reef-strewn inner leads from
+// being free in a storm.  Deeper water is safe in all but the largest seas.
+probability ( grounding_risk | water_depth, wave_height ) {
+  (very_shallow, calm)       0.25, 0.45, 0.30;
+  (very_shallow, moderate)   0.15, 0.40, 0.45;
+  (very_shallow, rough)      0.05, 0.25, 0.70;
+  (very_shallow, severe)     0.02, 0.13, 0.85;
+  (shallow, calm)            0.85, 0.13, 0.02;
+  (shallow, moderate)        0.70, 0.25, 0.05;
+  (shallow, rough)           0.35, 0.45, 0.20;
+  (shallow, severe)          0.15, 0.40, 0.45;
+  (moderate, calm)           0.97, 0.025, 0.005;
+  (moderate, moderate)       0.96, 0.035, 0.005;
+  (moderate, rough)          0.88, 0.10, 0.02;
+  (moderate, severe)         0.70, 0.24, 0.06;
+  (deep, calm)               0.99, 0.009, 0.001;
+  (deep, moderate)           0.99, 0.009, 0.001;
+  (deep, rough)              0.99, 0.009, 0.001;
+  (deep, severe)             0.97, 0.025, 0.005;
+}
+
+// Sea state for the hull and the payload.  A 5-10 m vessel works in waves
+// under 1 m, struggles above about 2.5 m and risks capsize or damage above
+// 4.5 m.  Strong currents steepen the waves (wind against tide) and make
+// station keeping harder, so they move each row towards the higher states.
+probability ( sea_state_risk | wave_height, current_speed ) {
+  (calm, weak)               0.95, 0.04, 0.01;
+  (calm, moderate)           0.92, 0.07, 0.01;
+  (calm, strong)             0.80, 0.17, 0.03;
+  (moderate, weak)           0.60, 0.33, 0.07;
+  (moderate, moderate)       0.50, 0.40, 0.10;
+  (moderate, strong)         0.35, 0.45, 0.20;
+  (rough, weak)              0.10, 0.40, 0.50;
+  (rough, moderate)          0.07, 0.35, 0.58;
+  (rough, strong)            0.04, 0.28, 0.68;
+  (severe, weak)             0.01, 0.09, 0.90;
+  (severe, moderate)         0.01, 0.07, 0.92;
+  (severe, strong)           0.005, 0.045, 0.95;
+}
+
+// Collision with other vessels.  Traffic density stands in for the chance of
+// an encounter that the vessel's collision avoidance has to resolve.
+probability ( collision_risk | vessel_traffic ) {
+  (low)                      0.95, 0.045, 0.005;
+  (medium)                   0.80, 0.17, 0.03;
+  (high)                     0.55, 0.35, 0.10;
+}
+
+// Superstructure icing from freezing spray.  It needs air colder than the
+// freezing point of sea water (about -2 C) and enough wind to lift spray
+// onto the vessel (from about 10 m/s); ice builds fastest in a gale.  A small
+// vessel has little reserve stability to carry the extra weight.
+probability ( icing_risk | air_temperature, wind_speed ) {
+  (freezing, light)          0.85, 0.12, 0.03;
+  (freezing, strong)         0.35, 0.45, 0.20;
+  (freezing, gale)           0.10, 0.35, 0.55;
+  (near_zero, light)         0.95, 0.04, 0.01;
+  (near_zero, strong)        0.80, 0.17, 0.03;
+  (near_zero, gale)          0.60, 0.30, 0.10;
+  (mild, light)              0.99, 0.009, 0.001;
+  (mild, strong)             0.99, 0.009, 0.001;
+  (mild, gale)               0.99, 0.009, 0.001;
+}
+
+// Overall passage risk.  The worst mechanism dominates, and the others add a
+// little on top.  Each parent state is scored 0, 1 or 2 and weighted
+// (grounding 1.0, sea state 1.0, collision 0.6, icing 0.6).  The combined
+// severity is the largest weighted score plus 0.2 times the sum of the rest,
+// capped at 2.  Each row is a discretised normal distribution (sd 0.45)
+// centred on that severity, with at least 0.005 in every state.
+probability ( usv_risk | grounding_risk, sea_state_risk, collision_risk, icing_risk ) {
+  (low, low, low, low)                0.917, 0.078, 0.005;
+  (low, low, low, medium)             0.376, 0.617, 0.007;
+  (low, low, low, high)               0.025, 0.794, 0.181;
+  (low, low, medium, low)             0.376, 0.617, 0.007;
+  (low, low, medium, medium)          0.248, 0.736, 0.016;
+  (low, low, medium, high)            0.012, 0.700, 0.288;
+  (low, low, high, low)               0.025, 0.794, 0.181;
+  (low, low, high, medium)            0.012, 0.700, 0.288;
+  (low, low, high, high)              0.005, 0.571, 0.424;
+  (low, medium, low, low)             0.072, 0.856, 0.072;
+  (low, medium, low, medium)          0.039, 0.833, 0.128;
+  (low, medium, low, high)            0.007, 0.617, 0.376;
+  (low, medium, medium, low)          0.039, 0.833, 0.128;
+  (low, medium, medium, medium)       0.020, 0.767, 0.213;
+  (low, medium, medium, high)         0.005, 0.473, 0.522;
+  (low, medium, high, low)            0.007, 0.617, 0.376;
+  (low, medium, high, medium)         0.005, 0.473, 0.522;
+  (low, medium, high, high)           0.005, 0.332, 0.663;
+  (low, high, low, low)               0.005, 0.078, 0.917;
+  (low, high, low, medium)            0.005, 0.078, 0.917;
+  (low, high, low, high)              0.005, 0.078, 0.917;
+  (low, high, medium, low)            0.005, 0.078, 0.917;
+  (low, high, medium, medium)         0.005, 0.078, 0.917;
+  (low, high, medium, high)           0.005, 0.078, 0.917;
+  (low, high, high, low)              0.005, 0.078, 0.917;
+  (low, high, high, medium)           0.005, 0.078, 0.917;
+  (low, high, high, high)             0.005, 0.078, 0.917;
+  (medium, low, low, low)             0.072, 0.856, 0.072;
+  (medium, low, low, medium)          0.039, 0.833, 0.128;
+  (medium, low, low, high)            0.007, 0.617, 0.376;
+  (medium, low, medium, low)          0.039, 0.833, 0.128;
+  (medium, low, medium, medium)       0.020, 0.767, 0.213;
+  (medium, low, medium, high)         0.005, 0.473, 0.522;
+  (medium, low, high, low)            0.007, 0.617, 0.376;
+  (medium, low, high, medium)         0.005, 0.473, 0.522;
+  (medium, low, high, high)           0.005, 0.332, 0.663;
+  (medium, medium, low, low)          0.025, 0.794, 0.181;
+  (medium, medium, low, medium)       0.012, 0.700, 0.288;
+  (medium, medium, low, high)         0.005, 0.377, 0.618;
+  (medium, medium, medium, low)       0.012, 0.700, 0.288;
+  (medium, medium, medium, medium)    0.005, 0.571, 0.424;
+  (medium, medium, medium, high)      0.005, 0.251, 0.744;
+  (medium, medium, high, low)         0.005, 0.377, 0.618;
+  (medium, medium, high, medium)      0.005, 0.251, 0.744;
+  (medium, medium, high, high)        0.005, 0.156, 0.839;
+  (medium, high, low, low)            0.005, 0.078, 0.917;
+  (medium, high, low, medium)         0.005, 0.078, 0.917;
+  (medium, high, low, high)           0.005, 0.078, 0.917;
+  (medium, high, medium, low)         0.005, 0.078, 0.917;
+  (medium, high, medium, medium)      0.005, 0.078, 0.917;
+  (medium, high, medium, high)        0.005, 0.078, 0.917;
+  (medium, high, high, low)           0.005, 0.078, 0.917;
+  (medium, high, high, medium)        0.005, 0.078, 0.917;
+  (medium, high, high, high)          0.005, 0.078, 0.917;
+  (high, low, low, low)               0.005, 0.078, 0.917;
+  (high, low, low, medium)            0.005, 0.078, 0.917;
+  (high, low, low, high)              0.005, 0.078, 0.917;
+  (high, low, medium, low)            0.005, 0.078, 0.917;
+  (high, low, medium, medium)         0.005, 0.078, 0.917;
+  (high, low, medium, high)           0.005, 0.078, 0.917;
+  (high, low, high, low)              0.005, 0.078, 0.917;
+  (high, low, high, medium)           0.005, 0.078, 0.917;
+  (high, low, high, high)             0.005, 0.078, 0.917;
+  (high, medium, low, low)            0.005, 0.078, 0.917;
+  (high, medium, low, medium)         0.005, 0.078, 0.917;
+  (high, medium, low, high)           0.005, 0.078, 0.917;
+  (high, medium, medium, low)         0.005, 0.078, 0.917;
+  (high, medium, medium, medium)      0.005, 0.078, 0.917;
+  (high, medium, medium, high)        0.005, 0.078, 0.917;
+  (high, medium, high, low)           0.005, 0.078, 0.917;
+  (high, medium, high, medium)        0.005, 0.078, 0.917;
+  (high, medium, high, high)          0.005, 0.078, 0.917;
+  (high, high, low, low)              0.005, 0.078, 0.917;
+  (high, high, low, medium)           0.005, 0.078, 0.917;
+  (high, high, low, high)             0.005, 0.078, 0.917;
+  (high, high, medium, low)           0.005, 0.078, 0.917;
+  (high, high, medium, medium)        0.005, 0.078, 0.917;
+  (high, high, medium, high)          0.005, 0.078, 0.917;
+  (high, high, high, low)             0.005, 0.078, 0.917;
+  (high, high, high, medium)          0.005, 0.078, 0.917;
+  (high, high, high, high)            0.005, 0.078, 0.917;
+}
