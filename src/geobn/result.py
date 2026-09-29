@@ -291,6 +291,14 @@ class InferenceResult:
             If False, omit the individual P(state) layers (default True).
         show_category:
             If False, omit the argmax category layer (default True).
+        show_entropy:
+            If False, omit the entropy layer (default True).
+
+        Each layer is resampled (nearest neighbour) onto a Web Mercator grid
+        of about the same resolution before it is drawn, so that it lines up
+        with the base map for any grid CRS.  The grid must lie within the
+        latitude range of Web Mercator (±85.05°); otherwise ``ValueError`` is
+        raised.
 
         Returns
         -------
