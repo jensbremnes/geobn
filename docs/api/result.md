@@ -29,7 +29,8 @@ metadata (`crs`, `transform`) mirrors the reference grid used during inference.
 ## Summary layers
 
 Each method reduces the per-pixel distribution of one query node to a single
-`(H, W)` float32 map. Pixels with NoData input are NaN. State indices follow the
+`(H, W)` float32 map. Pixels where the node's probabilities are NaN (NoData in an
+input it depends on) are NaN. State indices follow the
 order in `state_names[node]`, so order the states from least to most severe for
 `exceedance` and `quantile` to make sense.
 

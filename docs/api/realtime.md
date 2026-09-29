@@ -146,9 +146,9 @@ probs = bn.query_batch({
 # (3, 3) float32 array, one row per point, states in BN order
 ```
 
-A NaN value gives NaN probabilities for that point, the same as a NoData pixel
-in `infer()`. Every input node registered with `set_input()` needs a value;
-the table has no way to leave one out.
+A NaN value gives NaN probabilities for that point in the query nodes that
+depend on that input, the same as a NoData pixel in `infer()`. Every input node
+registered with `set_input()` needs a value, which may be NaN.
 
 ---
 

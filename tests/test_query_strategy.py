@@ -105,7 +105,6 @@ def _impossible_grid_kwargs(model, query_nodes):
         evidence_state_names={"A": ["a0", "a1"], "B": ["b0", "b1"], "D": ["d0", "d1"]},
         query_nodes=query_nodes,
         query_state_names={q: list(model.get_cpds(q).state_names[q]) for q in query_nodes},
-        nodata_mask=np.zeros((1, 2), dtype=bool),
     )
 
 
@@ -178,7 +177,6 @@ class TestQueryStrategySelection:
             evidence_state_grids={"slope": np.array([[0, 2]], dtype=np.int16)},
             evidence_state_names={"slope": ["flat", "moderate", "steep"]},
             query_state_names={"fire_risk": ["low", "medium", "high"]},
-            nodata_mask=np.zeros((1, 2), dtype=bool),
         )
         once = run_inference(query_nodes=["fire_risk"], **kwargs)
         twice = run_inference(query_nodes=["fire_risk", "fire_risk"], **kwargs)
