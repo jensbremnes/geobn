@@ -1,4 +1,4 @@
-"""Alta → Tromsø: a robot boat in calm weather and storm — geobn demo.
+"""Alta → Tromsø: a USV in calm weather and storm — geobn demo.
 
 A small unmanned surface vessel (USV) sails from Alta to Tromsø in northern
 Norway.  The trip goes out Altafjorden, past Stjernøya and Loppa, across
@@ -51,6 +51,7 @@ layer.
 Outputs (examples/alta_tromso/output/)
 --------------------------------------
     scenarios.png            calm and storm side by side, with both routes
+    readme_animation.gif     the route as the weather worsens (the README image)
     alta_tromso_map.html     interactive map: risk, waves and routes per scenario
     storm_timelapse.gif      the storm arriving, hour by hour, route re-planned
     <scenario>/usv_risk.tif  P(low), P(medium), P(high), entropy
@@ -148,6 +149,13 @@ SCENARIOS = [
         wind_from=317.0, wind_speed=20.4, air_temperature=1.6, hs_offshore=8.2,
     ),
 ]
+
+# The README animation: the same trip as the weather worsens, as
+# (offshore wave height m, wind speed m/s).  The wind blows from the
+# northwest and the air is 5 °C in every frame.
+README_STEPS = [(0.5, 3.0), (2.0, 8.0), (4.0, 14.0), (8.0, 20.0)]
+README_WIND_FROM = 315.0
+README_AIR_TEMPERATURE = 5.0
 
 # The storm timelapse: hourly frames around the storm scenario.
 TIMELAPSE_HOURS = range(-10, 7)
@@ -248,6 +256,30 @@ def wave_height_250m(
     if key not in _FETCH:
         _FETCH[key] = effective_fetch(water, direction, RESOLUTION, max_fetch=100_000)
     return sheltered_hs(offshore_hs, _FETCH[key], wind_speed)
+
+
+def weather_steps(bn, elevation, ends: dict) -> list:
+    """Risk and routes for README_STEPS, as frames for the README animation.
+
+    The weather is the same over the whole area, with the offshore wave height
+    reduced in sheltered water; the current is the calm day's.
+    """
+    calm = SCENARIOS[0]
+    bn.set_input("current_speed", weather_sources(calm, calm.time, elevation)[0]["current_speed"])
+    bn.set_input("air_temperature", geobn.ConstantSource(README_AIR_TEMPERATURE))
+    frames = []
+    for hs, u in README_STEPS:
+        bn.set_input("wind_speed", geobn.ConstantSource(u))
+        bn.set_input("wave_height", geobn.DerivedSource(
+            wave_height_250m, geobn.ConstantSource(hs), elevation,
+            geobn.ConstantSource(u), geobn.ConstantSource(README_WIND_FROM),
+        ))
+        result = bn.infer(query=["usv_risk"])
+        risk = result.expected_value("usv_risk", RISK_VALUES)
+        p_high = result.probabilities["usv_risk"][..., 2]
+        routes = plan_routes(risk, p_high, np.isfinite(risk), ends["Alta"], ends["Tromsø"])
+        frames.append((f"{hs:g} m waves  ·  {u:g} m/s wind from the northwest", risk, routes))
+    return frames
 
 
 def directional_fetch(water: np.ndarray, n: int = 16) -> np.ndarray:
@@ -444,7 +476,7 @@ def main() -> None:
     warnings.simplefilter("once", UserWarning)
 
     geobn.set_verbose(False)
-    print("Alta → Tromsø: a robot boat in calm weather and storm — geobn demo")
+    print("Alta → Tromsø: a USV in calm weather and storm — geobn demo")
 
     # ── 1. Network and grid ────────────────────────────────────────────────
     bn = geobn.load(HERE / "usv_passage.bif")
@@ -549,12 +581,15 @@ def main() -> None:
                   f"{r.max_p_high:>12.2f}")
 
     # ── 7. Figures ─────────────────────────────────────────────────────────
-    from figures import hero_figure, timelapse  # noqa: PLC0415
+    from figures import hero_figure, readme_animation, timelapse  # noqa: PLC0415
     from webmap import build_payload, write_map  # noqa: PLC0415
 
     places = {k: lonlat_to_rc(*v) for k, v in PLACES.items()}
     hero = hero_figure(OUT_DIR / "scenarios.png", elev, results, ends, places)
     print(f"\nFigure      → {hero}")
+    gif = readme_animation(OUT_DIR / "readme_animation.gif", elev,
+                           weather_steps(bn, elevation, ends), ends, places)
+    print(f"Animation   → {gif}")
 
     # The interactive map recomputes risk and route in the browser for any
     # weather set with its sliders; see webmap.py for what it carries.

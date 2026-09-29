@@ -2,7 +2,7 @@
 
 **Location:** Troms and Finnmark, northern Norway (69.45°N–70.65°N, 18.4°E–23.6°E)
 
-A small unmanned surface vessel (USV), a robot boat 5–10 m long, has to sail from Alta to
+A small unmanned surface vessel (USV), 5–10 m long, has to sail from Alta to
 Tromsø. The trip goes out Altafjorden, past the islands of Stjernøya and Loppa, across
 Lopphavet (about 70 km of open sea on the border between Troms and Finnmark), past Skjervøy
 and the mouth of Lyngen, and on to Tromsø. Much like a car's satnav routes around traffic
@@ -269,6 +269,8 @@ by MET Norway and because its wind blew from the direction Lopphavet is most ope
 ## Key outputs
 
 - **`output/scenarios.png`**: the two scenarios side by side
+- **`output/readme_animation.gif`**: the route as the weather worsens, from 0.5 m to 8 m
+  offshore waves with the wind from the northwest (the README image)
 - **`output/alta_tromso_map.html`**: the interactive map with weather sliders, described in
   [section 7](#7-the-interactive-map)
 - **`output/storm_timelapse.gif`**: Ingunn arriving hour by hour on 1 February, with the route
