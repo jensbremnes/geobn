@@ -69,6 +69,7 @@ nav:
       - Generic WCS: api/sources/wcs.md
     - Internals: api/internals.md
   - Examples:
+    - Alta → Tromsø (USV routing): examples/alta_tromso.md
     - Lyngen Alps (Avalanche): examples/lyngen_alps.md
     - Karmsundet (USV risk): examples/karmsundet.md
   - Contributing: contributing.md

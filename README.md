@@ -7,7 +7,9 @@
 
 Bayesian network inference over geospatial data.
 
-![geobn demo](docs/assets/demo.gif)
+[![A USV routed from Alta to Tromsø on a calm day and in a storm](docs/assets/alta_tromso_scenarios.png)](https://jensbremnes.github.io/geobn/examples/alta_tromso_map.html)
+
+A USV's route from Alta to Tromsø on a calm day and in a storm, planned on a geobn risk map ([`examples/alta_tromso/`](examples/alta_tromso/)). Click the figure to open the [interactive map](https://jensbremnes.github.io/geobn/examples/alta_tromso_map.html), where you set the weather and the route is planned again.
 
 `geobn` lets you turn heterogeneous data sources (offline and real-time) into insight over geographical areas by using techniques in probabilistic AI. The library is domain-agnostic, and may be used for, e.g., environmental risk assessment and risk‑informed route planning.
 
@@ -290,11 +292,14 @@ result = bn.infer(query=["avalanche_risk"])  # pure numpy, no pgmpy
 
 | Example | Description |
 |---|---|
+| [`examples/alta_tromso/`](examples/alta_tromso/) | USV passage risk and routing from Alta to Tromsø on a calm day and in a storm: EMODnet bathymetry and ship traffic, MET Norway wave, ocean and weather archives, route planning on the risk map |
 | [`examples/lyngen_alps/`](examples/lyngen_alps/) | Avalanche risk: Kartverket DTM via WCSSource + configurable weather, Lyngen Alps, Norway |
+| [`examples/karmsundet/`](examples/karmsundet/) | USV risk map: EMODnet bathymetry, AIS traffic density and live Met.no forecasts, Karmsundet, Norway |
 
 Run from the repo root:
 
 ```bash
+python examples/alta_tromso/run_example.py
 python examples/lyngen_alps/run_example.py
 ```
 
