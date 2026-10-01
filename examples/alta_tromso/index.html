@@ -1,0 +1,1628 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Pixel-wise Bayesian network inference over geospatial data">
+      
+      
+      
+        <link rel="canonical" href="https://jensbremnes.github.io/geobn/examples/alta_tromso/">
+      
+      
+        <link rel="prev" href="../../api/internals/">
+      
+      
+        <link rel="next" href="../lyngen_alps/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Alta → Tromsø (USV routing) - geobn</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="cyan">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#alta-troms-routing-a-usv-in-calm-weather-and-storm" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="geobn" class="md-header__button md-logo" aria-label="geobn" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            geobn
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Alta → Tromsø (USV routing)
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="cyan"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="cyan"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/jensbremnes/geobn" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    jensbremnes/geobn
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../installation/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Installation
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../concepts/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  How it works
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../api/network/" class="md-tabs__link">
+          
+  
+  
+  API Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
+          
+  
+  
+  Examples
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../contributing/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Contributing
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="geobn" class="md-nav__button md-logo" aria-label="geobn" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    geobn
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/jensbremnes/geobn" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    jensbremnes/geobn
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How it works
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/network/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GeoBayesianNetwork
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/realtime/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Real-time optimisation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/result/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    InferenceResult
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/breakpoints/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Breakpoints
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/terrain/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Terrain
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_6" id="__nav_4_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data Sources
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Data Sources
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/sources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/sources/core/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core sources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/sources/wcs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Generic WCS
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/internals/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Internals
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Examples
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Alta → Tromsø (USV routing)
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Alta → Tromsø (USV routing)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-it-demonstrates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What it demonstrates
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#bayesian-network-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bayesian network structure
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-sources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Data sources
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#annotated-walkthrough" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Annotated walkthrough
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Annotated walkthrough">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-a-projected-grid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. A projected grid
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-static-layers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Static layers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-weather-from-the-met-norway-archives" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Weather from the MET Norway archives
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-waves-in-sheltered-water" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Waves in sheltered water
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-freeze-precompute-infer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Freeze, precompute, infer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#6-from-risk-map-to-route" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. From risk map to route
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#7-the-interactive-map" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. The interactive map
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scenario-dates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scenario dates
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#key-outputs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key outputs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#limitations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Limitations
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-to-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How to run
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../lyngen_alps/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Lyngen Alps (Avalanche)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../karmsundet/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Karmsundet (USV risk)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="alta-troms-routing-a-usv-in-calm-weather-and-storm">Alta → Tromsø — Routing a USV in Calm Weather and Storm</h1>
+<p><strong>Location:</strong> Troms and Finnmark, northern Norway (69.45°N–70.65°N, 18.4°E–23.6°E)</p>
+<p>A small unmanned surface vessel (USV), 5–10 m long, has to sail from Alta to
+Tromsø. The trip goes out Altafjorden, past the islands of Stjernøya and Loppa, across
+Lopphavet (about 70 km of open sea on the border between Troms and Finnmark), past Skjervøy
+and the mouth of Lyngen, and on to Tromsø. Much like a car's satnav routes around traffic
+jams, the boat's planner routes around shallow rocks, busy shipping lanes and big waves.</p>
+<p>geobn provides the map the planner uses. It combines the sea depth, ship traffic and the
+weather into a probability of trouble for every 250 m pixel of the coast. The example plans
+the same trip for two real days:</p>
+<ul>
+<li><strong>A calm summer day</strong> (20 July 2024). The boat takes nearly the shortest way, along the
+  outer side of the islands.</li>
+<li><strong>A winter storm</strong> (Ingunn, 1 February 2024), with 9 m waves and 23 m/s wind from the
+  west-northwest in Lopphavet. The open sea is the riskiest part of the map. The boat shelters
+  behind Loppa, crosses the open water where it is narrow, and follows the sounds after
+  Skjervøy. The route is longer but has less risk.</li>
+</ul>
+<p><img alt="Calm and storm routes from Alta to Tromsø" src="../../assets/alta_tromso_scenarios.png" /></p>
+<p>The dashed line is the shortest route; the solid line is the route that balances distance
+against risk. The colour is geobn's passage risk: the expected value of <code>usv_risk</code> on a scale
+where low is 0, medium 0.5 and high 1.</p>
+<h2 id="what-it-demonstrates">What it demonstrates</h2>
+<ul>
+<li>The chain from data to decision: data sources → Bayesian network → risk map → route</li>
+<li>Reading MET Norway's model archives (wave, ocean and weather models) through a small
+  custom <code>DataSource</code> in the example, with the same disk cache as the built-in sources</li>
+<li><code>MosaicSource</code> with a fallback for every archive layer, and a provenance report saying which
+  source supplied each layer</li>
+<li><code>DerivedSource</code> for elevation → depth, kelvin → °C and a wave estimate for sheltered water</li>
+<li><code>freeze()</code> for the static layers and <code>precompute()</code>, so each new weather situation costs a
+  table lookup</li>
+<li>Route planning <em>outside</em> the library, from the posterior of the risk node</li>
+<li>The precomputed table used outside Python: an interactive map runs the model in the browser
+  while you set the weather with sliders</li>
+</ul>
+<h2 id="bayesian-network-structure">Bayesian network structure</h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>water_depth ─┬────────────────────────► grounding_risk ──┐
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>wave_height ─┤ (breaking waves in shallows)               │
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>             ├──────────────► sea_state_risk ─────────────┼──► usv_risk
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>current_speed┘                                            │
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>vessel_traffic ───────────────► collision_risk ───────────┤
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>air_temperature ─┬────────────► icing_risk ───────────────┘
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>wind_speed ──────┘
+</code></pre></div>
+<p>Six inputs, four risk mechanisms and one query node, <code>usv_risk</code> with states
+<code>{low, medium, high}</code>. The probabilities in <code>usv_passage.bif</code> are expert judgement for a
+vessel of this size, with the reasoning written as a comment above each table:</p>
+<ul>
+<li><strong>Grounding</strong> is likely in water under 5 m in any weather. In 5–20 m of water it depends on
+  the waves: rough and severe seas break over shoals. This keeps the inner leads from being
+  free in a storm, so the planner has a real trade-off between exposed and shallow water.</li>
+<li><strong>Sea state</strong> becomes a problem above about 2.5 m significant wave height and dangerous
+  above 4.5 m. Strong currents make each state worse.</li>
+<li><strong>Collision</strong> grows with ship traffic density.</li>
+<li><strong>Icing</strong> from freezing spray needs air below about −2 °C and wind above about 10 m/s.</li>
+<li><strong><code>usv_risk</code></strong> is driven by the worst mechanism, with the others adding a little.</li>
+</ul>
+<h2 id="data-sources">Data sources</h2>
+<table>
+<thead>
+<tr>
+<th>Node</th>
+<th>Source</th>
+<th>Details</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>water_depth</code></td>
+<td><code>DerivedSource</code> over <code>WCSSource</code> (EMODnet Bathymetry)</td>
+<td>~115 m; land becomes NaN, so no route can cross it</td>
+</tr>
+<tr>
+<td><code>vessel_traffic</code></td>
+<td><code>WCSSource</code> (EMODnet Human Activities)</td>
+<td>vessel density, all ship types, 2023, hours per km² per month, ~1 km</td>
+</tr>
+<tr>
+<td><code>wave_height</code></td>
+<td>WW3 4 km wave model archive (MET Norway), scaled by exposure</td>
+<td>see <a href="#4-waves-in-sheltered-water">Waves in sheltered water</a></td>
+</tr>
+<tr>
+<td><code>current_speed</code></td>
+<td>NorKyst v3 800 m ocean model archive (MET Norway)</td>
+<td>surface current speed from the east and north components</td>
+</tr>
+<tr>
+<td><code>wind_speed</code></td>
+<td>MEPS 2.5 km weather model archive (MET Norway)</td>
+<td>10 m wind speed</td>
+</tr>
+<tr>
+<td><code>air_temperature</code></td>
+<td>MEPS 2.5 km weather model archive (MET Norway)</td>
+<td>2 m temperature</td>
+</tr>
+</tbody>
+</table>
+<p>All sources are free and need no API key. EMODnet data and MET Norway data are published
+under CC BY 4.0.</p>
+<h2 id="annotated-walkthrough">Annotated walkthrough</h2>
+<h3 id="1-a-projected-grid">1. A projected grid</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">CRS</span>        <span class="o">=</span> <span class="s2">"EPSG:32634"</span>                              <span class="c1"># UTM zone 34N</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">RESOLUTION</span> <span class="o">=</span> <span class="mf">250.0</span>                                     <span class="c1"># metres</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">EXTENT</span>     <span class="o">=</span> <span class="p">(</span><span class="mi">398_000</span><span class="p">,</span> <span class="mi">7_704_500</span><span class="p">,</span> <span class="mi">602_000</span><span class="p">,</span> <span class="mi">7_840_500</span><span class="p">)</span>  <span class="c1"># 816 × 544 pixels</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="n">bn</span> <span class="o">=</span> <span class="n">geobn</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">"usv_passage.bif"</span><span class="p">)</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="n">bn</span><span class="o">.</span><span class="n">set_grid</span><span class="p">(</span><span class="n">CRS</span><span class="p">,</span> <span class="n">RESOLUTION</span><span class="p">,</span> <span class="n">EXTENT</span><span class="p">)</span>
+</code></pre></div>
+<p>A projected CRS keeps pixel sizes, and therefore route lengths, in metres.</p>
+<h3 id="2-static-layers">2. Static layers</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">elevation</span> <span class="o">=</span> <span class="n">geobn</span><span class="o">.</span><span class="n">WCSSource</span><span class="p">(</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="n">url</span><span class="o">=</span><span class="s2">"https://ows.emodnet-bathymetry.eu/wcs"</span><span class="p">,</span> <span class="n">layer</span><span class="o">=</span><span class="s2">"emodnet:mean"</span><span class="p">,</span> <span class="n">version</span><span class="o">=</span><span class="s2">"2.0.1"</span><span class="p">,</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="n">valid_range</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mf">1000.0</span><span class="p">,</span> <span class="mf">3000.0</span><span class="p">),</span> <span class="n">cache_dir</span><span class="o">=</span><span class="n">CACHE_DIR</span><span class="p">,</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="p">)</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="n">bn</span><span class="o">.</span><span class="n">set_input</span><span class="p">(</span><span class="s2">"water_depth"</span><span class="p">,</span> <span class="n">geobn</span><span class="o">.</span><span class="n">DerivedSource</span><span class="p">(</span><span class="n">depth_below_surface</span><span class="p">,</span> <span class="n">elevation</span><span class="p">))</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="n">vessel_traffic</span> <span class="o">=</span> <span class="n">geobn</span><span class="o">.</span><span class="n">WCSSource</span><span class="p">(</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>    <span class="n">url</span><span class="o">=</span><span class="s2">"https://ows.emodnet-humanactivities.eu/wcs"</span><span class="p">,</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>    <span class="n">layer</span><span class="o">=</span><span class="s2">"emodnet__vesseldensity_allavg"</span><span class="p">,</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>    <span class="n">extra_subsets</span><span class="o">=</span><span class="p">[</span><span class="s1">'time("2023-01-01T00:00:00.000Z")'</span><span class="p">],</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>    <span class="n">cache_dir</span><span class="o">=</span><span class="n">CACHE_DIR</span><span class="p">,</span>
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="p">)</span>
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="n">bn</span><span class="o">.</span><span class="n">set_input</span><span class="p">(</span><span class="s2">"vessel_traffic"</span><span class="p">,</span> <span class="n">geobn</span><span class="o">.</span><span class="n">MosaicSource</span><span class="p">(</span>
+<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>    <span class="p">[</span><span class="n">vessel_traffic</span><span class="p">,</span> <span class="n">geobn</span><span class="o">.</span><span class="n">ConstantSource</span><span class="p">(</span><span class="mf">0.0</span><span class="p">)],</span> <span class="n">names</span><span class="o">=</span><span class="p">[</span><span class="s2">"EMODnet"</span><span class="p">,</span> <span class="s2">"none recorded"</span><span class="p">],</span>
+<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a><span class="p">))</span>
+</code></pre></div>
+<p>The EMODnet vessel density coverage has a time axis with one value per year, which
+<code>extra_subsets</code> selects.</p>
+<h3 id="3-weather-from-the-met-norway-archives">3. Weather from the MET Norway archives</h3>
+<p>MET Norway's model archives on <a href="https://thredds.met.no">thredds.met.no</a> are NetCDF files on
+projected model grids: rotated pole for WW3, Lambert conformal for MEPS and polar
+stereographic for NorKyst. <code>met_archive.py</code> defines <code>MetArchiveSource</code>, a <code>DataSource</code> that
+asks OPeNDAP for the block of the model grid covering the study area, reads the plain-text
+response with numpy and returns it on the model's own projection. geobn then reprojects it
+like any other raster. The source implements <code>_fetch</code> and <code>_cache_key</code> (see
+<a href="../../api/sources/">Data Sources</a>), so <code>cache_dir</code> works as it does for the built-in
+sources.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">wind_speed</span> <span class="o">=</span> <span class="n">geobn</span><span class="o">.</span><span class="n">MosaicSource</span><span class="p">(</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="p">[</span><span class="n">MetArchiveSource</span><span class="p">(</span><span class="n">meps_file</span><span class="p">(</span><span class="n">t</span><span class="p">),</span> <span class="p">(</span><span class="s2">"x_wind_10m"</span><span class="p">,</span> <span class="s2">"y_wind_10m"</span><span class="p">),</span> <span class="n">t</span><span class="p">,</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>                      <span class="n">combine</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">hypot</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"wind_speed"</span><span class="p">,</span> <span class="n">cache_dir</span><span class="o">=</span><span class="n">CACHE_DIR</span><span class="p">),</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>     <span class="n">geobn</span><span class="o">.</span><span class="n">ConstantSource</span><span class="p">(</span><span class="n">sc</span><span class="o">.</span><span class="n">wind_speed</span><span class="p">)],</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>    <span class="n">names</span><span class="o">=</span><span class="p">[</span><span class="s2">"MEPS"</span><span class="p">,</span> <span class="s2">"scenario constant"</span><span class="p">],</span> <span class="n">on_error</span><span class="o">=</span><span class="s2">"skip"</span><span class="p">,</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="p">)</span>
+</code></pre></div>
+<p>Every weather layer is a mosaic that ends in a constant for the scenario. With
+<code>on_error="skip"</code>, an unreachable archive gives a <code>UserWarning</code> and the constant takes over.
+The run prints which source supplied each layer:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>── Winter storm: 01 Feb 2024 16:00 UTC ──────────────────────
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    offshore waves  : WW3 4 km 100%
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    current_speed   : NorKyst 800 m 89%, NorKyst 800 m (nearest cell) 9%, assumed 0.2 m/s 3%
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    wind_speed      : MEPS 100%
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>    wind direction  : MEPS 100%
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>    air_temperature : MEPS 100%
+</code></pre></div>
+<p>Current speed is read twice from the same cache entry. Bilinear resampling leaves a gap along
+the coast wherever a model cell has a land neighbour, and the second read, with
+<code>resampling="nearest"</code>, fills most of it.</p>
+<h3 id="4-waves-in-sheltered-water">4. Waves in sheltered water</h3>
+<p>WW3 describes the open sea well, but its 4 km cells do not resolve the sounds: a cell either
+has no value there or covers water and islands alike. <code>waves.py</code> brings the offshore sea
+state onto the 250 m grid according to how exposed each pixel is:</p>
+<ol>
+<li>WW3 is extended into the gaps with the nearest model value and smoothed, which gives the
+   offshore wave height next to every pixel.</li>
+<li>The <em>effective fetch</em> of each pixel is measured by casting rays upwind, at the wind
+   direction and ±12°, ±24° and ±36°, until they reach land.</li>
+<li>The offshore wave height is scaled by <code>sqrt(fetch / 50 km)</code>, capped at 1, because
+   fetch-limited waves grow with the square root of the fetch. Open water with 50 km of fetch
+   or more keeps the WW3 value.</li>
+<li>Where a long sound raises more wind sea of its own than that, the JONSWAP fetch-limited
+   height is used instead.</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">offshore_hs</span> <span class="o">=</span> <span class="n">geobn</span><span class="o">.</span><span class="n">MosaicSource</span><span class="p">(</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="p">[</span><span class="n">geobn</span><span class="o">.</span><span class="n">DerivedSource</span><span class="p">(</span><span class="n">spread_offshore</span><span class="p">,</span> <span class="n">MetArchiveSource</span><span class="p">(</span><span class="n">ww3_file</span><span class="p">(</span><span class="n">t</span><span class="p">),</span> <span class="s2">"hs"</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="o">...</span><span class="p">)),</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>     <span class="n">geobn</span><span class="o">.</span><span class="n">ConstantSource</span><span class="p">(</span><span class="n">sc</span><span class="o">.</span><span class="n">hs_offshore</span><span class="p">)],</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="n">names</span><span class="o">=</span><span class="p">[</span><span class="s2">"WW3 4 km"</span><span class="p">,</span> <span class="s2">"scenario constant"</span><span class="p">],</span> <span class="n">on_error</span><span class="o">=</span><span class="s2">"skip"</span><span class="p">,</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="p">)</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="n">wave_height</span> <span class="o">=</span> <span class="n">geobn</span><span class="o">.</span><span class="n">DerivedSource</span><span class="p">(</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>    <span class="n">wave_height_250m</span><span class="p">,</span> <span class="n">offshore_hs</span><span class="p">,</span> <span class="n">elevation</span><span class="p">,</span> <span class="n">wind_speed</span><span class="p">,</span> <span class="n">wind_from</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="p">)</span>
+</code></pre></div>
+<p>This is an approximation. It ignores refraction, diffraction around headlands and
+wave–current interaction, so its values are estimates of exposure. It makes the wave field
+vary in space, which the planner needs: with the same wave height everywhere, a storm would
+raise the risk of every route alike and leave the choice of route unchanged.</p>
+<h3 id="5-freeze-precompute-infer">5. Freeze, precompute, infer</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">for</span> <span class="n">node</span><span class="p">,</span> <span class="n">bp</span> <span class="ow">in</span> <span class="n">BREAKPOINTS</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="n">bn</span><span class="o">.</span><span class="n">set_discretization</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">bp</span><span class="p">)</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="n">bn</span><span class="o">.</span><span class="n">freeze</span><span class="p">(</span><span class="s2">"water_depth"</span><span class="p">,</span> <span class="s2">"vessel_traffic"</span><span class="p">)</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="n">bn</span><span class="o">.</span><span class="n">precompute</span><span class="p">(</span><span class="n">query</span><span class="o">=</span><span class="p">[</span><span class="s2">"usv_risk"</span><span class="p">])</span>       <span class="c1"># 4·4·3·3·3·3 = 1,296 combinations</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="k">for</span> <span class="n">sc</span> <span class="ow">in</span> <span class="n">SCENARIOS</span><span class="p">:</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>    <span class="k">for</span> <span class="n">node</span><span class="p">,</span> <span class="n">src</span> <span class="ow">in</span> <span class="n">weather_sources</span><span class="p">(</span><span class="n">sc</span><span class="p">,</span> <span class="n">sc</span><span class="o">.</span><span class="n">time</span><span class="p">,</span> <span class="n">elevation</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>        <span class="n">bn</span><span class="o">.</span><span class="n">set_input</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">src</span><span class="p">)</span>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>    <span class="n">result</span> <span class="o">=</span> <span class="n">bn</span><span class="o">.</span><span class="n">infer</span><span class="p">(</span><span class="n">query</span><span class="o">=</span><span class="p">[</span><span class="s2">"usv_risk"</span><span class="p">])</span>
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>    <span class="n">risk</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">expected_value</span><span class="p">(</span><span class="s2">"usv_risk"</span><span class="p">,</span> <span class="p">{</span><span class="s2">"low"</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span> <span class="s2">"medium"</span><span class="p">:</span> <span class="mf">0.5</span><span class="p">,</span> <span class="s2">"high"</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">})</span>
+</code></pre></div>
+<p>Only the weather inputs change between scenarios. The frozen layers are fetched and
+discretised once, and every <code>infer()</code> is a lookup in the precomputed table.</p>
+<h3 id="6-from-risk-map-to-route">6. From risk map to route</h3>
+<p>Route planning is not part of geobn. <code>routing.py</code> builds a graph with one node per water
+pixel, joined to its eight neighbours, and runs Dijkstra's algorithm from
+<code>scipy.sparse.csgraph</code>. A step costs its length times</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>1 + K_RISK · risk          (K_RISK = 8)
+</code></pre></div>
+<p>so a kilometre of certain high risk costs as much as 9 km of risk-free water. With
+<code>K_RISK = 0</code> the planner returns the shortest route. Land and pixels without data have no
+edges, so no route can cross them.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">cost</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">water</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">+</span> <span class="n">K_RISK</span> <span class="o">*</span> <span class="n">risk</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="n">path</span><span class="p">,</span> <span class="n">length_m</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">plan_route</span><span class="p">(</span><span class="n">cost</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">goal</span><span class="p">,</span> <span class="n">pixel_size</span><span class="o">=</span><span class="mf">250.0</span><span class="p">)</span>
+</code></pre></div>
+<h3 id="7-the-interactive-map">7. The interactive map</h3>
+<p><code>output/alta_tromso_map.html</code> is a Leaflet map with sliders for the offshore wave height, the
+wind speed, the wind direction and the air temperature, starting at Ingunn's values. Moving a
+slider recomputes the passage risk of every pixel and plans the risk-aware route again; the
+shortest route stays where it is. Dragging a slider shows how the
+route leaves the open water as the waves build, and how the sheltered side moves when the wind
+turns.</p>
+<p>The browser runs the same model as the script, without Python or pgmpy. <code>webmap.py</code> exports:</p>
+<ul>
+<li>geobn's precomputed table, as the expected <code>usv_risk</code> and P(high) for each of the 1,296
+  combinations of input states, read with <code>bn.query_batch()</code>;</li>
+<li>the states of the inputs that the sliders do not change: water depth, ship traffic and
+  surface current (the calm-day NorKyst field);</li>
+<li>the effective fetch of every pixel for 16 wind directions, from which the page computes the
+  wave height with the formula in <code>waves.py</code>;</li>
+<li>the breakpoints, the route cost and the start and goal.</li>
+</ul>
+<p><code>webmap.js</code> discretises the slider values and the wave heights with the same breakpoints,
+looks up the risk, and runs Dijkstra's algorithm on the same graph as <code>routing.py</code>. The wind,
+the temperature and the offshore wave height apply to the whole area, and the offshore wave
+height is then reduced in sheltered water, which is the calculation the script falls back to
+when the weather archives cannot be reached. With the same inputs, the page and the Python
+code give the same risk map and the same route.</p>
+<p><a href="../alta_tromso_map.html">Open the interactive map</a>. The page is a single file of about 2.5 MB. The base maps are Kartverket's greyscale and
+topographic maps, its nautical chart and OpenStreetMap; the risk layer is reprojected to Web
+Mercator so it lines up with them.</p>
+<h2 id="scenario-dates">Scenario dates</h2>
+<p>The dates come from a scan of the WW3 archive at a point in Lopphavet (70.40°N, 21.0°E),
+every three days from October 2023 to March 2026, winters and summers.</p>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Time (UTC)</th>
+<th>In Lopphavet</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Calm</td>
+<td>20 July 2024, 12:00</td>
+<td>Hs 0.25 m, wind 1.4 m/s</td>
+<td>the calmest summer midday of 2024 in the archive</td>
+</tr>
+<tr>
+<td>Storm</td>
+<td>1 February 2024, 16:00</td>
+<td>Hs 9 m, wind 23 m/s from WNW</td>
+<td>extreme weather <em>Ingunn</em>, <a href="https://www.met.no/vaer-og-klima/ekstremvaervarsler-og-andre-farevarsler/ekstremvaer-far-navn/_/attachment/inline/968d86dd-82b8-4fe5-b0b7-451f9b88f7ce:9d41c437c62b0cd4e8eea389fd82f42ce4b1ccb6/MET-info-25-2024.pdf">MET info 25/2024</a></td>
+</tr>
+</tbody>
+</table>
+<p>Ingunn is a named extreme-weather low, not a polar low. The scan found higher waves on
+29 January 2024, with wind from the west-southwest. Ingunn was chosen because it is documented
+by MET Norway and because its wind blew from the direction Lopphavet is most open to.</p>
+<h2 id="key-outputs">Key outputs</h2>
+<ul>
+<li><strong><code>output/scenarios.png</code></strong>: the two scenarios side by side</li>
+<li><strong><code>output/readme_animation.gif</code></strong>: the route as the weather worsens, from 0.5 m to 8 m
+  offshore waves with the wind from the northwest (the README image)</li>
+<li><strong><code>output/alta_tromso_map.html</code></strong>: the interactive map with weather sliders, described in
+  <a href="#7-the-interactive-map">section 7</a></li>
+<li><strong><code>output/storm_timelapse.gif</code></strong>: Ingunn arriving hour by hour on 1 February, with the route
+  planned again for every hour</li>
+<li><strong><code>output/&lt;scenario&gt;/usv_risk.tif</code></strong>: P(low), P(medium), P(high) and entropy;
+  <strong><code>risk_score.tif</code></strong>: the expected risk used by the planner</li>
+<li><strong><code>output/routes_&lt;scenario&gt;.geojson</code></strong>: the shortest and risk-aware routes, with length,
+  mean risk and the largest P(high) along each</li>
+</ul>
+<p>The run ends with a summary:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>  scenario route                  length  mean risk  max P(high)
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>  calm     shortest               229 km       0.18         0.35
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>  calm     risk_aware             235 km       0.13         0.35
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>  storm    shortest               229 km       0.59         0.91
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>  storm    risk_aware             240 km       0.42         0.91
+</code></pre></div>
+<p>The storm route still reaches a P(high) of 0.91 where it crosses the open water south of
+Loppa. Every route between the two harbours crosses some open water.</p>
+<h2 id="limitations">Limitations</h2>
+<ul>
+<li>The probabilities in the network are expert judgement, not fitted to incidents.</li>
+<li>The narrowest water on either route is about 5 pixels (1.3 km) wide. Sounds narrower than
+  two pixels (500 m) cannot be resolved at this resolution, and the harbours themselves are
+  one or two pixels wide; the start and goal are moved to the nearest water pixel.</li>
+<li>EMODnet depths at 115 m, resampled to 250 m, do not show individual rocks. The
+  <code>very_shallow</code> state stands in for them.</li>
+<li>Current speed is the surface current of an 800 m model; tidal streams in narrow sounds are
+  stronger than it shows.</li>
+</ul>
+<h2 id="how-to-run">How to run</h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/alta_tromso/run_example.py
+</code></pre></div>
+<p>The first run downloads the bathymetry, the vessel density and about 200 small OPeNDAP
+subsets from thredds.met.no, which takes about five minutes; most of it is for the hourly
+timelapse.
+Everything is cached in <code>examples/alta_tromso/cache/</code>, and later runs make no requests.
+Add <code>--no-timelapse</code> to skip the GIF.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "toc.integrate", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
